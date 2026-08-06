@@ -15,22 +15,25 @@
 
 <header class="site-header">
 	<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Kill Team Tracker</a>
-	{#if data.user}
-		<nav>
-			<a href="/matches">Log Match</a>
-			<a href="/stats">My Stats</a>
-			<a href="/leaderboard">Leaderboard</a>
-			<span class="muted" style="color: rgba(255,255,255,0.85)">{data.user.name}</span>
+	<div class="account">
+		{#if data.user}
+			<span>{data.user.name}</span>
 			<form method="post" action="/logout" use:enhance>
 				<button type="submit">Sign out</button>
 			</form>
-		</nav>
-	{:else}
-		<nav>
+		{:else}
 			<a href="/login">Login</a>
-		</nav>
-	{/if}
+		{/if}
+	</div>
 </header>
+
+{#if data.user}
+	<nav class="site-subnav">
+		<a href="/matches">Log Match</a>
+		<a href="/stats">My Stats</a>
+		<a href="/leaderboard">Leaderboard</a>
+	</nav>
+{/if}
 
 <main>
 	{@render children()}
