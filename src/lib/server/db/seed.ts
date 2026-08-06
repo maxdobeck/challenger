@@ -137,13 +137,15 @@ async function seedUsers() {
 
 	const staticUser = await seedUser(STATIC_USER.name, STATIC_USER.email);
 	createdUserIds.push(staticUser.id);
-	staticUser.created ? created++ : skipped++;
+	if (staticUser.created) created++;
+	else skipped++;
 
 	for (const name of FAKE_PLAYERS) {
 		const email = `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`;
 		const user = await seedUser(name, email);
 		createdUserIds.push(user.id);
-		user.created ? created++ : skipped++;
+		if (user.created) created++;
+		else skipped++;
 	}
 
 	console.log(`Users: ${created} created, ${skipped} already existed.`);

@@ -14,6 +14,11 @@ export default defineConfig(
 	{
 		languageOptions: {
 			globals: { ...globals.browser, ...globals.node }
+		},
+		rules: {
+			// The app doesn't use SvelteKit's typed resolve() helper for links —
+			// adopting it is a separate routing-convention change, out of scope here.
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	},
 	{

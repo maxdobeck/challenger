@@ -9,12 +9,12 @@
 </script>
 
 <svelte:head>
-	<title>Kill Team Tracker</title>
+	<title>Challenger</title>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
 <header class="site-header">
-	<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Kill Team Tracker</a>
+	<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Challenger</a>
 	{#if data.user}
 		<nav>
 			<a href="/matches">Log Match</a>
