@@ -15,12 +15,14 @@
 		"test:e2e": "playwright install && playwright test",
 		"test": "npm run test:e2e",
 		"db:start": "docker compose up",
+		"db:up": "docker compose up -d",
 		"db:push": "drizzle-kit push",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"db:studio": "drizzle-kit studio",
 		"db:seed": "tsx --env-file=.env src/lib/server/db/seed.ts",
-		"auth:schema": "auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes"
+		"auth:schema": "auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes",
+		"launch": "npm run db:up && npm run db:migrate && npm run db:seed && npm run dev"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
