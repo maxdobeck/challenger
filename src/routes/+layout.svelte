@@ -29,9 +29,21 @@
 
 {#if data.user}
 	<nav class="site-subnav">
-		<a href="/matches">Log Match</a>
-		<a href="/stats">My Stats</a>
-		<a href="/leaderboard">Leaderboard</a>
+		<a
+			href="/matches"
+			class="hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-[var(--color-masthead)]"
+			>Log Match</a
+		>
+		<a
+			href="/stats"
+			class="hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-[var(--color-masthead)]"
+			>My Stats</a
+		>
+		<a
+			href="/leaderboard"
+			class="hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-[var(--color-masthead)]"
+			>Leaderboard</a
+		>
 	</nav>
 {/if}
 

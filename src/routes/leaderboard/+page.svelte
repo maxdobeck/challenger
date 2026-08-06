@@ -28,7 +28,11 @@
 		</thead>
 		<tbody>
 			{#each data.leaderboard as entry, i (entry.userId)}
-				<tr class={i === 0 ? 'rank-1' : ''}>
+				<tr
+					class="{i === 0
+						? 'rank-1'
+						: ''} hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-[var(--color-masthead)]"
+				>
 					<td>{i + 1}</td>
 					<td>
 						{entry.userName}
