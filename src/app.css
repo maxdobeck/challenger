@@ -173,8 +173,16 @@ th {
 	border-bottom: 1px solid var(--color-border);
 }
 
+.sortable-table tbody tr {
+	transition: background-color 700ms ease;
+}
+
 .sortable-table tbody tr:nth-child(even) {
 	background: var(--color-surface);
+}
+
+.sortable-table tbody tr:hover {
+	background: #800080;
 }
 
 .sort-button {

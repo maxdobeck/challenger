@@ -30,8 +30,7 @@
 		{columns}
 		rows={data.leaderboard}
 		rowKey={(e) => e.userId}
-		rowClass={(_, i) =>
-			`${i === 0 ? 'rank-1 ' : ''}hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-[var(--color-masthead)]`}
+		rowClass={(_, i) => (i === 0 ? 'rank-1' : '')}
 		showRank
 		defaultSortKey="winRate"
 		defaultSortDirection="desc"
