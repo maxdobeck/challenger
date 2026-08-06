@@ -1,4 +1,4 @@
-<h1>Challenger</h1>
+<h1>Challenger: A Home for Kill Team</h1>
 <p>
 	Log your matches, track your win rate with every team, and see how you stack up on the
 	leaderboard.
