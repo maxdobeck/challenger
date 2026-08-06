@@ -119,10 +119,6 @@ h1 {
 	border-right: 1px solid var(--color-border);
 }
 
-.site-subnav a:first-child {
-	padding-left: 0;
-}
-
 .site-subnav a:hover {
 	color: var(--color-accent);
 }
