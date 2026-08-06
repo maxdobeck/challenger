@@ -1,11 +1,23 @@
 <script lang="ts">
 	import type { PageServerData } from './$types';
+	import SortableTable from '$lib/components/SortableTable.svelte';
 
 	let { data }: { data: PageServerData } = $props();
+
+	type TeamStat = (typeof data.teamStats)[number];
 
 	function pct(n: number) {
 		return `${Math.round(n * 100)}%`;
 	}
+
+	const columns = [
+		{ key: 'team', label: 'Team', sortValue: (t: TeamStat) => t.teamName.toLowerCase() },
+		{ key: 'games', label: 'Games', sortValue: (t: TeamStat) => t.games },
+		{ key: 'wins', label: 'W', sortValue: (t: TeamStat) => t.wins },
+		{ key: 'losses', label: 'L', sortValue: (t: TeamStat) => t.losses },
+		{ key: 'draws', label: 'D', sortValue: (t: TeamStat) => t.draws },
+		{ key: 'winRate', label: 'Win rate', sortValue: (t: TeamStat) => t.winRate }
+	];
 </script>
 
 <h1>My Stats</h1>
@@ -27,28 +39,27 @@
 
 {#if data.teamStats.length > 0}
 	<h2>By Team</h2>
-	<table>
-		<thead>
-			<tr>
-				<th>Team</th>
-				<th>Games</th>
-				<th>W</th>
-				<th>L</th>
-				<th>D</th>
-				<th>Win rate</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each data.teamStats as t (t.teamName)}
-				<tr>
-					<td>{t.teamName}</td>
-					<td>{t.games}</td>
-					<td>{t.wins}</td>
-					<td>{t.losses}</td>
-					<td>{t.draws}</td>
-					<td>{pct(t.winRate)}</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
+	<SortableTable
+		{columns}
+		rows={data.teamStats}
+		rowKey={(t) => t.teamName}
+		defaultSortKey="games"
+		defaultSortDirection="desc"
+	>
+		{#snippet cell(t, col)}
+			{#if col.key === 'team'}
+				{t.teamName}
+			{:else if col.key === 'winRate'}
+				{pct(t.winRate)}
+			{:else if col.key === 'games'}
+				{t.games}
+			{:else if col.key === 'wins'}
+				{t.wins}
+			{:else if col.key === 'losses'}
+				{t.losses}
+			{:else if col.key === 'draws'}
+				{t.draws}
+			{/if}
+		{/snippet}
+	</SortableTable>
 {/if}
