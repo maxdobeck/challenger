@@ -1,9 +1,9 @@
-import { redirect } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit';
 import { eq, or } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
-import { match, team } from '$lib/server/db/schema';
+import { match, team, user } from '$lib/server/db/schema';
 
 const player1Team = alias(team, 'player1_team');
 const player2Team = alias(team, 'player2_team');
@@ -12,6 +12,22 @@ export const load: PageServerLoad = async (event) => {
 	const currentUser = event.locals.user;
 	if (!currentUser) {
 		return redirect(302, '/login');
+	}
+
+	const requestedUserId = event.url.searchParams.get('user');
+	const viewingOwnStats = !requestedUserId || requestedUserId === currentUser.id;
+	const targetUserId = viewingOwnStats ? currentUser.id : requestedUserId;
+
+	let targetUserName = currentUser.name;
+	if (!viewingOwnStats) {
+		const [targetUser] = await db
+			.select({ name: user.name })
+			.from(user)
+			.where(eq(user.id, targetUserId));
+		if (!targetUser) {
+			return error(404, 'Player not found');
+		}
+		targetUserName = targetUser.name;
 	}
 
 	const rows = await db
@@ -31,7 +47,7 @@ export const load: PageServerLoad = async (event) => {
 		.from(match)
 		.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
 		.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
-		.where(or(eq(match.player1Id, currentUser.id), eq(match.player2Id, currentUser.id)));
+		.where(or(eq(match.player1Id, targetUserId), eq(match.player2Id, targetUserId)));
 
 	const byTeam = new Map<
 		string,
@@ -43,7 +59,7 @@ export const load: PageServerLoad = async (event) => {
 	let totalDraws = 0;
 
 	for (const row of rows) {
-		const youArePlayer1 = row.player1Id === currentUser.id;
+		const youArePlayer1 = row.player1Id === targetUserId;
 		const yourTeam = youArePlayer1 ? row.player1TeamName : row.player2TeamName;
 		const yourTotal = youArePlayer1
 			? row.player1Crit + row.player1Tac + row.player1Kill + row.player1Primary
@@ -87,6 +103,8 @@ export const load: PageServerLoad = async (event) => {
 			totalDraws,
 			winRate: totalGames ? totalWins / totalGames : 0,
 			favoriteTeam
-		}
+		},
+		viewingOwnStats,
+		playerName: targetUserName
 	};
 };

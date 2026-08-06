@@ -20,7 +20,7 @@
 	];
 </script>
 
-<h1>My Stats</h1>
+<h1>{data.viewingOwnStats ? 'My Stats' : `${data.playerName} Stats`}</h1>
 
 <div class="card">
 	{#if data.summary.totalGames === 0}

@@ -37,7 +37,7 @@
 	>
 		{#snippet cell(entry, col)}
 			{#if col.key === 'player'}
-				{entry.userName}
+				<a href="/stats?user={entry.userId}">{entry.userName}</a>
 				{#if entry.userId === data.currentUserId}<span class="muted"> (you)</span>{/if}
 			{:else if col.key === 'winRate'}
 				{pct(entry.winRate)}
