@@ -59,8 +59,37 @@ const FAKE_PLAYERS = [
 	'Silas Graven',
 	'Talia Ravencrest',
 	'Ursin Hollowpeak',
-	'Vesper Ninegold'
+	'Vesper Ninegold',
+	'Wren Duskhollow',
+	'Xandra Emberlyn',
+	'Yorick Stonefell',
+	'Zara Nightwind',
+	'Aldric Thornbury',
+	'Brienne Ashcroft',
+	'Corvin Blackwood',
+	'Daria Frostvale',
+	'Edrin Ravenscar',
+	'Freya Ironheart',
+	'Gideon Marrowfell',
+	'Halcyon Vex',
+	'Isolde Graymoor',
+	'Jorund Blackpeak',
+	'Kestrel Dawnshade',
+	'Liora Winterhall',
+	'Marek Ashenhollow',
+	'Nyra Coldwater',
+	'Oswin Blackthorn',
+	'Riven Duskgale',
+	'Seraphine Vaultwright',
+	'Thane Grimhold',
+	'Una Stormcaller',
+	'Vance Hollowmere'
 ];
+
+// Match-count targets: Max always gets exactly this many, everyone else gets
+// a random count in the range below (as their own logged, player1 matches).
+const STATIC_USER_MATCH_COUNT = 23;
+const RANDOM_MATCH_COUNT_RANGE: [number, number] = [12, 53];
 
 const TOURNAMENT_NAMES = [
 	'Winter Championship',
@@ -131,75 +160,80 @@ async function seedUser(name: string, email: string) {
 }
 
 async function seedUsers() {
-	const createdUserIds: string[] = [];
+	const userIds: string[] = [];
 	let created = 0;
 	let skipped = 0;
 
 	const staticUser = await seedUser(STATIC_USER.name, STATIC_USER.email);
-	createdUserIds.push(staticUser.id);
+	userIds.push(staticUser.id);
 	if (staticUser.created) created++;
 	else skipped++;
 
 	for (const name of FAKE_PLAYERS) {
 		const email = `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`;
 		const user = await seedUser(name, email);
-		createdUserIds.push(user.id);
+		userIds.push(user.id);
 		if (user.created) created++;
 		else skipped++;
 	}
 
 	console.log(`Users: ${created} created, ${skipped} already existed.`);
-	return createdUserIds;
+	return { staticUserId: staticUser.id, userIds };
 }
 
-async function seedMatches(userIds: string[], teams: Array<{ id: number; name: string }>) {
-	const existingCount = await db.$count(match);
-	if (existingCount > 0) {
-		console.log(`Matches: ${existingCount} already present, skipping match seeding.`);
-		return;
-	}
+async function seedMatches(
+	staticUserId: string,
+	userIds: string[],
+	teams: Array<{ id: number; name: string }>
+) {
+	// Regenerated every run so per-user match counts always match the current
+	// targets below, rather than accumulating from whatever a prior run left.
+	await db.delete(match);
 
 	const rows: Array<typeof match.$inferInsert> = [];
-	const totalMatches = userIds.length * randomInt(4, 8);
 
-	for (let i = 0; i < totalMatches; i++) {
-		const player1Id = randomItem(userIds);
-		let player2Id = randomItem(userIds);
-		while (player2Id === player1Id) {
-			player2Id = randomItem(userIds);
+	for (const player1Id of userIds) {
+		const targetGames =
+			player1Id === staticUserId ? STATIC_USER_MATCH_COUNT : randomInt(...RANDOM_MATCH_COUNT_RANGE);
+
+		for (let i = 0; i < targetGames; i++) {
+			let player2Id = randomItem(userIds);
+			while (player2Id === player1Id) {
+				player2Id = randomItem(userIds);
+			}
+
+			const player1Team = randomItem(teams);
+			const player2Team = randomItem(teams);
+			const p1 = randomScoreSet();
+			const p2 = randomScoreSet();
+
+			rows.push({
+				player1Id,
+				player2Id,
+				player1TeamId: player1Team.id,
+				player2TeamId: player2Team.id,
+				tournament: randomItem(TOURNAMENT_NAMES),
+				player1Crit: p1.crit,
+				player1Tac: p1.tac,
+				player1Kill: p1.kill,
+				player1Primary: p1.primary,
+				player2Crit: p2.crit,
+				player2Tac: p2.tac,
+				player2Kill: p2.kill,
+				player2Primary: p2.primary,
+				playedAt: randomPastDate(180)
+			});
 		}
-
-		const player1Team = randomItem(teams);
-		const player2Team = randomItem(teams);
-		const p1 = randomScoreSet();
-		const p2 = randomScoreSet();
-
-		rows.push({
-			player1Id,
-			player2Id,
-			player1TeamId: player1Team.id,
-			player2TeamId: player2Team.id,
-			tournament: randomItem(TOURNAMENT_NAMES),
-			player1Crit: p1.crit,
-			player1Tac: p1.tac,
-			player1Kill: p1.kill,
-			player1Primary: p1.primary,
-			player2Crit: p2.crit,
-			player2Tac: p2.tac,
-			player2Kill: p2.kill,
-			player2Primary: p2.primary,
-			playedAt: randomPastDate(180)
-		});
 	}
 
 	await db.insert(match).values(rows);
-	console.log(`Matches: ${rows.length} inserted.`);
+	console.log(`Matches: ${rows.length} inserted (Max: ${STATIC_USER_MATCH_COUNT}, others: ${RANDOM_MATCH_COUNT_RANGE[0]}-${RANDOM_MATCH_COUNT_RANGE[1]} each, as their own logged games).`);
 }
 
 async function main() {
 	const teams = await seedTeams();
-	const userIds = await seedUsers();
-	await seedMatches(userIds, teams);
+	const { staticUserId, userIds } = await seedUsers();
+	await seedMatches(staticUserId, userIds, teams);
 
 	console.log('\nSeed complete.');
 	console.log(`Static login -> email: ${STATIC_USER.email}, password: ${SEED_PASSWORD}`);
