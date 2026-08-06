@@ -25,6 +25,10 @@ const auth = betterAuth({
 
 const SEED_PASSWORD = 'password123';
 
+// Fixed, predictable account for local testing — always seeded with the same
+// name/email/password so you can reliably log in as "max".
+const STATIC_USER = { name: 'Max', email: 'max@killteam.example' };
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const teamNames = readFileSync(path.resolve(__dirname, '../../../../teams.txt'), 'utf-8')
 	.split('\n')
@@ -109,29 +113,39 @@ async function seedTeams() {
 	return db.select().from(team);
 }
 
+async function seedUser(name: string, email: string) {
+	try {
+		const result = await auth.api.signUpEmail({
+			body: { name, email, password: SEED_PASSWORD }
+		});
+		return { id: result.user.id, created: true };
+	} catch (error) {
+		if (error instanceof APIError) {
+			// Already exists from a previous seed run — look up the id instead.
+			const existing = await db.query.user.findFirst({ where: (u, { eq }) => eq(u.email, email) });
+			if (!existing) throw error;
+			return { id: existing.id, created: false };
+		}
+		throw error;
+	}
+}
+
 async function seedUsers() {
 	const createdUserIds: string[] = [];
 	let created = 0;
 	let skipped = 0;
 
+	const staticUser = await seedUser(STATIC_USER.name, STATIC_USER.email);
+	createdUserIds.push(staticUser.id);
+	if (staticUser.created) created++;
+	else skipped++;
+
 	for (const name of FAKE_PLAYERS) {
 		const email = `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`;
-		try {
-			const result = await auth.api.signUpEmail({
-				body: { name, email, password: SEED_PASSWORD }
-			});
-			createdUserIds.push(result.user.id);
-			created++;
-		} catch (error) {
-			if (error instanceof APIError) {
-				// Already exists from a previous seed run — look up the id instead.
-				const existing = await db.query.user.findFirst({ where: (u, { eq }) => eq(u.email, email) });
-				if (existing) createdUserIds.push(existing.id);
-				skipped++;
-			} else {
-				throw error;
-			}
-		}
+		const user = await seedUser(name, email);
+		createdUserIds.push(user.id);
+		if (user.created) created++;
+		else skipped++;
 	}
 
 	console.log(`Users: ${created} created, ${skipped} already existed.`);
@@ -188,9 +202,7 @@ async function main() {
 	await seedMatches(userIds, teams);
 
 	console.log('\nSeed complete.');
-	console.log(
-		`Sample login -> email: ${FAKE_PLAYERS[0].toLowerCase().replace(/\s+/g, '.')}@killteam.example, password: ${SEED_PASSWORD}`
-	);
+	console.log(`Static login -> email: ${STATIC_USER.email}, password: ${SEED_PASSWORD}`);
 
 	await client.end();
 }

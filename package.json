@@ -10,6 +10,8 @@
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"lint": "eslint .",
+		"lint:fix": "eslint . --fix",
 		"test:e2e": "playwright install && playwright test",
 		"test": "npm run test:e2e",
 		"db:start": "docker compose up",
@@ -21,6 +23,7 @@
 		"auth:schema": "auth generate --config src/lib/server/auth.ts --output src/lib/server/db/auth.schema.ts --yes"
 	},
 	"devDependencies": {
+		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.60.0",
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/kit": "^2.63.0",
@@ -31,12 +34,18 @@
 		"better-auth": "^1.6.23",
 		"drizzle-kit": "^0.31.10",
 		"drizzle-orm": "^0.45.2",
+		"eslint": "^10.8.0",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-svelte": "^3.22.0",
+		"globals": "^17.9.0",
 		"postgres": "^3.4.9",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
+		"svelte-eslint-parser": "^1.8.0",
 		"tailwindcss": "^4.3.3",
 		"tsx": "^4.23.8",
 		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.66.0",
 		"vite": "^8.0.16"
 	}
 }

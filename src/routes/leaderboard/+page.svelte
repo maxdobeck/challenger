@@ -23,6 +23,7 @@
 				<th>L</th>
 				<th>D</th>
 				<th>Win rate</th>
+				<th>Best Team</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -38,6 +39,7 @@
 					<td>{entry.losses}</td>
 					<td>{entry.draws}</td>
 					<td>{pct(entry.winRate)}</td>
+					<td>{entry.bestTeam ?? '—'}</td>
 				</tr>
 			{/each}
 		</tbody>
