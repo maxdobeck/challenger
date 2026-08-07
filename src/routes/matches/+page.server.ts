@@ -4,8 +4,14 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { Actions, PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { match, team, user } from '$lib/server/db/schema';
-import { addDemoMatch, getDemoOpponents, getDemoTeams, getDemoUserMatchRows } from '$lib/server/demo/data';
+import { match, team, tournament, user } from '$lib/server/db/schema';
+import {
+	addDemoMatch,
+	getDemoOpponents,
+	getDemoTeams,
+	getDemoTournamentOptions,
+	getDemoUserMatchRows
+} from '$lib/server/demo/data';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -28,13 +34,19 @@ export const load: PageServerLoad = async (event) => {
 				.from(user)
 				.where(ne(user.id, currentUser.id))
 				.orderBy(user.name);
+	const tournaments = DEMO_MODE
+		? getDemoTournamentOptions()
+		: await db
+				.select({ id: tournament.id, name: tournament.name })
+				.from(tournament)
+				.orderBy(desc(tournament.startDate));
 
 	const rows = DEMO_MODE
 		? getDemoUserMatchRows(currentUser.id)
 		: await db
 				.select({
 					id: match.id,
-					tournament: match.tournament,
+					tournament: tournament.name,
 					playedAt: match.playedAt,
 					player1Id: match.player1Id,
 					player2Id: match.player2Id,
@@ -56,6 +68,7 @@ export const load: PageServerLoad = async (event) => {
 				.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
 				.innerJoin(player1User, eq(match.player1Id, player1User.id))
 				.innerJoin(player2User, eq(match.player2Id, player2User.id))
+				.leftJoin(tournament, eq(match.tournamentId, tournament.id))
 				.where(or(eq(match.player1Id, currentUser.id), eq(match.player2Id, currentUser.id)))
 				.orderBy(desc(match.playedAt));
 
@@ -93,7 +106,7 @@ export const load: PageServerLoad = async (event) => {
 		};
 	});
 
-	return { teams, opponents, matches };
+	return { teams, opponents, tournaments, matches };
 };
 
 function parseScore(formData: FormData, key: string) {
@@ -112,7 +125,8 @@ export const actions: Actions = {
 		const opponentId = formData.get('opponentId')?.toString();
 		const player1TeamId = Number(formData.get('player1TeamId'));
 		const player2TeamId = Number(formData.get('player2TeamId'));
-		const tournament = formData.get('tournament')?.toString().trim() || null;
+		const rawTournamentId = formData.get('tournamentId')?.toString();
+		const tournamentId = rawTournamentId ? Number(rawTournamentId) : null;
 
 		if (!opponentId || !player1TeamId || !player2TeamId) {
 			return fail(400, { message: 'Opponent and both teams are required.' });
@@ -123,7 +137,7 @@ export const actions: Actions = {
 			player2Id: opponentId,
 			player1TeamId,
 			player2TeamId,
-			tournament,
+			tournamentId,
 			player1Crit: parseScore(formData, 'player1Crit'),
 			player1Tac: parseScore(formData, 'player1Tac'),
 			player1Kill: parseScore(formData, 'player1Kill'),

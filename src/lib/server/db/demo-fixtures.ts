@@ -74,16 +74,82 @@ export const FAKE_PLAYERS = [
 export const STATIC_USER_MATCH_COUNT = 23;
 export const RANDOM_MATCH_COUNT_RANGE: [number, number] = [12, 53];
 
-export const TOURNAMENT_NAMES = [
-	'Winter Championship',
-	'Local RTT',
-	'Round 3 Open',
-	'Spring Skirmish',
-	'Regional Qualifier',
-	'Friday Night Kill Team',
+// Building blocks for the in-memory demo tournaments (src/lib/server/demo/data.ts).
+// The real seed (seed.ts) uses faker for true randomness; the demo wants a fixed,
+// reproducible set, so it composes names/venues/addresses from these arrays via the
+// seeded Rng instead.
+export const DEMO_TOURNAMENT_COUNT = 60;
+
+export const TOURNAMENT_SUFFIXES = [
+	'Championship',
+	'Open',
+	'RTT',
 	'Grand Clash',
-	null,
-	null
+	'Skirmish',
+	'Qualifier',
+	'Invitational',
+	'Cup',
+	'Showdown',
+	'Masters'
+];
+
+export const VENUE_TYPES = [
+	'Convention Center',
+	'Game Hall',
+	'Legion Post',
+	'Arena',
+	'Community Center',
+	'Wargaming Club',
+	'Expo Center'
+];
+
+export const DEMO_CITIES = [
+	'Ashford',
+	'Bright Harbor',
+	'Cinderfall',
+	'Dunmoor',
+	'Everlight',
+	'Frostgate',
+	'Grimhollow',
+	'Highreach',
+	'Ironford',
+	'Kessering',
+	'Lowmarsh',
+	'Northwind',
+	'Oakvale',
+	'Pinecrest',
+	'Ravenmoor',
+	'Stonebrook'
+];
+
+export const DEMO_VENUE_HOSTS = [
+	'Blackspire',
+	'Crimson Banner',
+	'Dragonfire',
+	'Emberwood',
+	'Grey Warden',
+	'Kingsmoot',
+	'Silverpin',
+	'Thunderhall'
+];
+
+export const DEMO_STREETS = [
+	'Market St',
+	'Guild Row',
+	'Foundry Ave',
+	'Harbor Way',
+	'Kingsroad',
+	'Mill Lane',
+	'Coppergate',
+	'Wyvern Blvd'
+];
+
+export const DEMO_TOURNAMENT_DETAILS = [
+	'Two-day event, five rounds, current championship rules pack.',
+	'Casual one-day RTT — all welcome, bring three lists.',
+	'Regional qualifier feeding into the seasonal invitational.',
+	'Narrative campaign day with escalating point limits.',
+	'Singles bracket, best-of-three finals, prize support for top four.'
 ];
 
 export function randomItem<T>(items: T[], rng: Rng = Math.random): T {

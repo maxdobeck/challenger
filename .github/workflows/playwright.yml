@@ -9,35 +9,17 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: root
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB: local
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgres://root:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/local
-      ORIGIN: http://localhost:4173
-      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
+      # The e2e suite runs against the demo build (DEMO_MODE=true, no database —
+      # playwright.config.ts loads .env.demo), so CI needs no Postgres, seed, or
+      # DB secrets. Real-auth tests skip themselves in demo mode.
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run db:migrate
-      - run: npm run db:seed
       - run: npm run test:e2e

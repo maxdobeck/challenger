@@ -1,0 +1,11 @@
+{
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"build": {
+		"env": {
+			"DEMO_MODE": "true"
+		}
+	},
+	"env": {
+		"DEMO_MODE": "true"
+	}
+}

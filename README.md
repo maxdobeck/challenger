@@ -72,6 +72,17 @@ The seed script (`src/lib/server/db/seed.ts`) creates:
 
 > To deploy, you may need to swap in a different [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
 
+## Deployment
+
+**Known deploy warnings:** during `npm install` (e.g. on Vercel) npm prints two deprecation warnings:
+
+```
+npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.hirok.io
+npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.hirok.io
+```
+
+These are harmless and the build still succeeds. Both packages are transitive dependencies of `drizzle-kit` (a dev-only dependency used for `db:*` scripts), not something we depend on directly. They can't be removed until `drizzle-kit` drops the `@esbuild-kit/*` packages upstream — they've been merged into `tsx`, and the current latest `drizzle-kit` still references them.
+
 ## Project provenance
 
 Originally scaffolded with [`sv`](https://github.com/sveltejs/cli):

@@ -3,11 +3,6 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/lib/server/db/schema';
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-	throw new Error('DATABASE_URL is not set (run with e.g. `npm run test:e2e --env-file=.env`)');
-}
-
 const SEED_PASSWORD = 'password123';
 
 async function loginAs(page: Page, email: string) {
@@ -18,6 +13,15 @@ async function loginAs(page: Page, email: string) {
 }
 
 test('the first 3 seeded users can log in successfully', async ({ page }) => {
+	// Real-auth flow against the seeded database — demo mode has no DB and
+	// auto-authenticates as Max, so there's nothing here to exercise.
+	test.skip(process.env.DEMO_MODE === 'true', 'requires a seeded database, N/A in demo mode');
+
+	const DATABASE_URL = process.env.DATABASE_URL;
+	if (!DATABASE_URL) {
+		throw new Error('DATABASE_URL is not set (copy .env.example to .env and fill it in; Playwright loads .env automatically)');
+	}
+
 	const client = postgres(DATABASE_URL);
 	const db = drizzle(client, { schema });
 
@@ -33,7 +37,9 @@ test('the first 3 seeded users can log in successfully', async ({ page }) => {
 		await loginAs(page, user.email);
 
 		await expect(page).toHaveURL(/\/leaderboard/);
-		await expect(page.getByText(user.name, { exact: true })).toBeVisible();
+		// Scope to the masthead: the name also appears as a leaderboard row link,
+		// so an unscoped exact-text match is ambiguous.
+		await expect(page.locator('.site-header').getByText(user.name, { exact: true })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Sign out' }).click();
 		await expect(page).toHaveURL(/\/login/);

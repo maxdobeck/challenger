@@ -4,7 +4,13 @@ import {
 	FAKE_PLAYERS,
 	STATIC_USER_MATCH_COUNT,
 	RANDOM_MATCH_COUNT_RANGE,
-	TOURNAMENT_NAMES,
+	DEMO_TOURNAMENT_COUNT,
+	TOURNAMENT_SUFFIXES,
+	VENUE_TYPES,
+	DEMO_CITIES,
+	DEMO_VENUE_HOSTS,
+	DEMO_STREETS,
+	DEMO_TOURNAMENT_DETAILS,
 	randomItem,
 	randomInt,
 	randomPastDate,
@@ -14,13 +20,24 @@ import {
 
 type DemoUser = { id: string; name: string; email: string };
 type DemoTeam = { id: number; name: string };
+type DemoTournament = {
+	id: number;
+	name: string;
+	startDate: string; // 'YYYY-MM-DD'
+	endDate: string; // 'YYYY-MM-DD'
+	location: string;
+	address: string | null;
+	details: string | null;
+	createdById: string;
+};
+type DemoAttendee = { tournamentId: number; userId: string; registeredAt: Date };
 type DemoMatch = {
 	id: number;
 	player1Id: string;
 	player2Id: string;
 	player1TeamId: number;
 	player2TeamId: number;
-	tournament: string | null;
+	tournamentId: number | null;
 	player1Crit: number;
 	player1Tac: number;
 	player1Kill: number;
@@ -69,6 +86,59 @@ export const DEMO_USER = {
 	updatedAt: new Date('2026-01-01T00:00:00Z')
 };
 
+// Reproducible in-memory tournaments, composed from the shared fixture arrays via
+// the seeded rng (the real seed uses faker instead — see seed.ts).
+function isoDate(d: Date): string {
+	return d.toISOString().slice(0, 10);
+}
+
+const TOURNAMENT_RANGE_START = Date.parse('2025-01-01T00:00:00Z');
+const TOURNAMENT_RANGE_END = Date.parse('2026-12-31T00:00:00Z');
+
+export const demoTournaments: DemoTournament[] = [];
+for (let i = 1; i <= DEMO_TOURNAMENT_COUNT; i++) {
+	const city = randomItem(DEMO_CITIES, rng);
+	const startMs =
+		TOURNAMENT_RANGE_START + Math.floor(rng() * (TOURNAMENT_RANGE_END - TOURNAMENT_RANGE_START));
+	const start = new Date(startMs);
+	const end = new Date(startMs + randomInt(0, 2, rng) * 24 * 60 * 60 * 1000);
+	demoTournaments.push({
+		id: i,
+		name: `${city} ${randomItem(TOURNAMENT_SUFFIXES, rng)}`,
+		startDate: isoDate(start),
+		endDate: isoDate(end),
+		location: `${randomItem(DEMO_VENUE_HOSTS, rng)} ${randomItem(VENUE_TYPES, rng)}`,
+		address: `${randomInt(10, 9999, rng)} ${randomItem(DEMO_STREETS, rng)}, ${city}`,
+		details: randomItem(DEMO_TOURNAMENT_DETAILS, rng),
+		createdById: MAX_ID
+	});
+}
+
+const tournamentIds = demoTournaments.map((t) => t.id);
+
+// ~40% of matches are tied to a tournament; the rest are casual (null) — mirrors
+// the real seed's distribution (seed.ts).
+function randomTournamentId(): number | null {
+	return rng() < 0.4 ? randomItem(tournamentIds, rng) : null;
+}
+
+// Register a random subset of players per tournament, biasing Max into ~35% of
+// events so the static demo account always has tournaments to show.
+export const demoAttendees: DemoAttendee[] = [];
+for (const t of demoTournaments) {
+	const target = randomInt(2, 12, rng);
+	const chosen = new Set<string>();
+	while (chosen.size < target) {
+		chosen.add(randomItem(demoUsers, rng).id);
+	}
+	if (rng() < 0.35) {
+		chosen.add(MAX_ID);
+	}
+	for (const userId of chosen) {
+		demoAttendees.push({ tournamentId: t.id, userId, registeredAt: randomPastDate(120, rng) });
+	}
+}
+
 let nextMatchId = 1;
 export const demoMatches: DemoMatch[] = [];
 
@@ -95,7 +165,7 @@ for (const player1 of demoUsers) {
 			player2Id: player2.id,
 			player1TeamId: player1Team.id,
 			player2TeamId: player2Team.id,
-			tournament: randomItem(TOURNAMENT_NAMES, rng),
+			tournamentId: randomTournamentId(),
 			player1Crit: p1.crit,
 			player1Tac: p1.tac,
 			player1Kill: p1.kill,
@@ -111,6 +181,7 @@ for (const player1 of demoUsers) {
 
 const teamById = new Map(demoTeams.map((t) => [t.id, t]));
 const userById = new Map(demoUsers.map((u) => [u.id, u]));
+const tournamentById = new Map(demoTournaments.map((t) => [t.id, t]));
 
 function teamName(id: number): string {
 	return teamById.get(id)?.name ?? 'Unknown Team';
@@ -118,6 +189,10 @@ function teamName(id: number): string {
 
 function userName(id: string): string {
 	return userById.get(id)?.name ?? 'Unknown Player';
+}
+
+function tournamentName(id: number | null): string | null {
+	return id == null ? null : (tournamentById.get(id)?.name ?? null);
 }
 
 export function getDemoLeaderboardRows() {
@@ -144,7 +219,7 @@ export function getDemoUserMatchRows(userId: string) {
 		.filter((m) => m.player1Id === userId || m.player2Id === userId)
 		.map((m) => ({
 			id: m.id,
-			tournament: m.tournament,
+			tournament: tournamentName(m.tournamentId),
 			playedAt: m.playedAt,
 			player1Id: m.player1Id,
 			player2Id: m.player2Id,
@@ -202,7 +277,7 @@ export function addDemoMatch(input: {
 	player2Id: string;
 	player1TeamId: number;
 	player2TeamId: number;
-	tournament: string | null;
+	tournamentId: number | null;
 	player1Crit: number;
 	player1Tac: number;
 	player1Kill: number;
@@ -216,5 +291,89 @@ export function addDemoMatch(input: {
 		id: nextMatchId++,
 		playedAt: new Date(),
 		...input
+	});
+}
+
+// Tournament dropdown options for the Log Match form — mirrors the real query in
+// matches/+page.server.ts (id + name, newest first).
+export function getDemoTournamentOptions(): { id: number; name: string }[] {
+	return [...demoTournaments]
+		.sort((a, b) => b.startDate.localeCompare(a.startDate))
+		.map((t) => ({ id: t.id, name: t.name }));
+}
+
+// Tournaments list with derived attendee counts — mirrors tournaments/+page.server.ts.
+export function getDemoTournaments() {
+	const counts = new Map<number, number>();
+	for (const a of demoAttendees) {
+		counts.set(a.tournamentId, (counts.get(a.tournamentId) ?? 0) + 1);
+	}
+	return [...demoTournaments]
+		.sort((a, b) => b.startDate.localeCompare(a.startDate))
+		.map((t) => ({
+			id: t.id,
+			name: t.name,
+			startDate: t.startDate,
+			endDate: t.endDate,
+			location: t.location,
+			attendees: counts.get(t.id) ?? 0
+		}));
+}
+
+// Tournament detail: the tournament, its attendees, and its match rows (raw —
+// the route computes totals/result, same as the DB path). Returns null if the id
+// doesn't exist, so the route can 404. Mirrors tournaments/[id]/+page.server.ts.
+export function getDemoTournamentDetail(id: number) {
+	const tournament = tournamentById.get(id);
+	if (!tournament) return null;
+
+	const attendees = demoAttendees
+		.filter((a) => a.tournamentId === id)
+		.map((a) => ({ id: a.userId, name: userName(a.userId), registeredAt: a.registeredAt }))
+		.sort((a, b) => a.name.localeCompare(b.name));
+
+	const matchRows = demoMatches
+		.filter((m) => m.tournamentId === id)
+		.map((m) => ({
+			id: m.id,
+			playedAt: m.playedAt,
+			player1Name: userName(m.player1Id),
+			player2Name: userName(m.player2Id),
+			player1TeamName: teamName(m.player1TeamId),
+			player2TeamName: teamName(m.player2TeamId),
+			player1Crit: m.player1Crit,
+			player1Tac: m.player1Tac,
+			player1Kill: m.player1Kill,
+			player1Primary: m.player1Primary,
+			player2Crit: m.player2Crit,
+			player2Tac: m.player2Tac,
+			player2Kill: m.player2Kill,
+			player2Primary: m.player2Primary
+		}))
+		.sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime());
+
+	return { tournament, attendees, matchRows };
+}
+
+let nextTournamentId = DEMO_TOURNAMENT_COUNT + 1;
+
+// In-memory tournament create for demo mode — mirrors tournaments/new create action.
+// Registers the creator as the first attendee so the detail page isn't empty.
+export function addDemoTournament(input: {
+	name: string;
+	startDate: string;
+	endDate: string;
+	location: string;
+	address: string | null;
+	details: string | null;
+	createdById: string;
+}): void {
+	const tournament: DemoTournament = { id: nextTournamentId++, ...input };
+	demoTournaments.push(tournament);
+	tournamentById.set(tournament.id, tournament);
+	demoAttendees.push({
+		tournamentId: tournament.id,
+		userId: input.createdById,
+		registeredAt: new Date()
 	});
 }
