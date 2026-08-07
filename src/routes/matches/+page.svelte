@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import TournamentCombobox from '$lib/components/TournamentCombobox.svelte';
 	import type { ActionData, PageServerData } from './$types';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -27,7 +28,7 @@
 	</label>
 	<label>
 		Tournament <span class="muted">(optional)</span>
-		<input name="tournament" placeholder="e.g. Winter Championship" />
+		<TournamentCombobox tournaments={data.tournaments} name="tournamentId" />
 	</label>
 
 	<div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
