@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { loginAsMax } from './helpers';
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/login');
-	await page.getByRole('button', { name: 'Login as Max', exact: true }).click();
-	await expect(page).toHaveURL(/\/leaderboard/);
+	await loginAsMax(page);
 });
 
 test('clicking a player name on the leaderboard opens their stats page', async ({ page }) => {

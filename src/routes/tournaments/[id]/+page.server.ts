@@ -2,8 +2,12 @@ import { error, redirect } from '@sveltejs/kit';
 import { desc, eq } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PageServerLoad } from './$types';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { match, team, tournament, tournamentAttendee, user } from '$lib/server/db/schema';
+import { getDemoTournamentDetail } from '$lib/server/demo/data';
+
+const DEMO_MODE = env.DEMO_MODE === 'true';
 
 const player1User = alias(user, 'player1_user');
 const player2User = alias(user, 'player2_user');
@@ -20,46 +24,58 @@ export const load: PageServerLoad = async (event) => {
 		return error(404, 'Tournament not found');
 	}
 
-	const [found] = await db.select().from(tournament).where(eq(tournament.id, id));
-	if (!found) {
-		return error(404, 'Tournament not found');
+	let found;
+	let attendees;
+	let matchRows;
+
+	if (DEMO_MODE) {
+		const detail = getDemoTournamentDetail(id);
+		if (!detail) {
+			return error(404, 'Tournament not found');
+		}
+		({ tournament: found, attendees, matchRows } = detail);
+	} else {
+		[found] = await db.select().from(tournament).where(eq(tournament.id, id));
+		if (!found) {
+			return error(404, 'Tournament not found');
+		}
+
+		attendees = await db
+			.select({
+				id: user.id,
+				name: user.name,
+				registeredAt: tournamentAttendee.registeredAt
+			})
+			.from(tournamentAttendee)
+			.innerJoin(user, eq(tournamentAttendee.userId, user.id))
+			.where(eq(tournamentAttendee.tournamentId, id))
+			.orderBy(user.name);
+
+		matchRows = await db
+			.select({
+				id: match.id,
+				playedAt: match.playedAt,
+				player1Name: player1User.name,
+				player2Name: player2User.name,
+				player1TeamName: player1Team.name,
+				player2TeamName: player2Team.name,
+				player1Crit: match.player1Crit,
+				player1Tac: match.player1Tac,
+				player1Kill: match.player1Kill,
+				player1Primary: match.player1Primary,
+				player2Crit: match.player2Crit,
+				player2Tac: match.player2Tac,
+				player2Kill: match.player2Kill,
+				player2Primary: match.player2Primary
+			})
+			.from(match)
+			.innerJoin(player1User, eq(match.player1Id, player1User.id))
+			.innerJoin(player2User, eq(match.player2Id, player2User.id))
+			.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
+			.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
+			.where(eq(match.tournamentId, id))
+			.orderBy(desc(match.playedAt));
 	}
-
-	const attendees = await db
-		.select({
-			id: user.id,
-			name: user.name,
-			registeredAt: tournamentAttendee.registeredAt
-		})
-		.from(tournamentAttendee)
-		.innerJoin(user, eq(tournamentAttendee.userId, user.id))
-		.where(eq(tournamentAttendee.tournamentId, id))
-		.orderBy(user.name);
-
-	const matchRows = await db
-		.select({
-			id: match.id,
-			playedAt: match.playedAt,
-			player1Name: player1User.name,
-			player2Name: player2User.name,
-			player1TeamName: player1Team.name,
-			player2TeamName: player2Team.name,
-			player1Crit: match.player1Crit,
-			player1Tac: match.player1Tac,
-			player1Kill: match.player1Kill,
-			player1Primary: match.player1Primary,
-			player2Crit: match.player2Crit,
-			player2Tac: match.player2Tac,
-			player2Kill: match.player2Kill,
-			player2Primary: match.player2Primary
-		})
-		.from(match)
-		.innerJoin(player1User, eq(match.player1Id, player1User.id))
-		.innerJoin(player2User, eq(match.player2Id, player2User.id))
-		.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
-		.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
-		.where(eq(match.tournamentId, id))
-		.orderBy(desc(match.playedAt));
 
 	const matches = matchRows.map((r) => {
 		const player1Total = r.player1Crit + r.player1Tac + r.player1Kill + r.player1Primary;

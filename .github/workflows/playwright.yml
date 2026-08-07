@@ -7,7 +7,27 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  # Demo mode: no database. playwright.config.ts loads .env.demo (DEMO_MODE=true)
+  # because DATABASE_URL is unset, so the build + preview run entirely in-memory.
+  # The real-auth tests skip themselves in demo mode.
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  # Database mode: real Postgres + seed. DATABASE_URL is set, so the config skips
+  # .env.demo and the app runs against the database with real auth (the login /
+  # sign-out tests run here).
+  database:
     runs-on: ubuntu-latest
     services:
       postgres:

@@ -1,9 +1,19 @@
 import { existsSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
 
-// Load .env so DATABASE_URL etc. are available to the config's webServer and to test files.
+// The suite runs in whichever mode is configured:
+//   - Real database: provide DATABASE_URL (a local .env, or CI's "database"
+//     job) and the app runs against Postgres with real auth.
+//   - Demo mode: with no DATABASE_URL, load .env.demo so the build + preview
+//     servers and the test files run with DEMO_MODE=true and no database (CI's
+//     "demo" job, and the default for a fresh checkout).
+// Real-auth-only tests (login-as-max, smoketest-login) skip themselves when
+// DEMO_MODE is set.
 if (existsSync('.env')) {
 	process.loadEnvFile('.env');
+}
+if (!process.env.DATABASE_URL && existsSync('.env.demo')) {
+	process.loadEnvFile('.env.demo');
 }
 
 export default defineConfig({

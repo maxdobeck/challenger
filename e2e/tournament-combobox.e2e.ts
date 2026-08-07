@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { loginAsMax } from './helpers';
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/login');
-	await page.getByRole('button', { name: 'Login as Max', exact: true }).click();
-	await expect(page).toHaveURL(/\/leaderboard/);
+	await loginAsMax(page);
 });
 
 test('tournament combobox fuzzy-searches by name as you type', async ({ page }) => {

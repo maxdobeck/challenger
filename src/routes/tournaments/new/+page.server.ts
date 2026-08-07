@@ -1,7 +1,11 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { tournament } from '$lib/server/db/schema';
+import { addDemoTournament } from '$lib/server/demo/data';
+
+const DEMO_MODE = env.DEMO_MODE === 'true';
 
 export const load: PageServerLoad = (event) => {
 	if (!event.locals.user) {
@@ -32,15 +36,27 @@ export const actions: Actions = {
 			return fail(400, { message: 'End date cannot be before the start date.' });
 		}
 
-		await db.insert(tournament).values({
-			name,
-			startDate,
-			endDate,
-			location,
-			address,
-			details,
-			createdById: currentUser.id
-		});
+		if (DEMO_MODE) {
+			addDemoTournament({
+				name,
+				startDate,
+				endDate,
+				location,
+				address,
+				details,
+				createdById: currentUser.id
+			});
+		} else {
+			await db.insert(tournament).values({
+				name,
+				startDate,
+				endDate,
+				location,
+				address,
+				details,
+				createdById: currentUser.id
+			});
+		}
 
 		return redirect(303, '/tournaments');
 	}

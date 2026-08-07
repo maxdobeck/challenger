@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { loginAsMax } from './helpers';
 
 test.beforeEach(async ({ page }) => {
-	await page.goto('/login');
-	await page.getByRole('button', { name: 'Login as Max', exact: true }).click();
-	await expect(page).toHaveURL(/\/leaderboard/);
+	await loginAsMax(page);
 });
 
 test('pressing Enter loads every tournament matching the search', async ({ page }) => {

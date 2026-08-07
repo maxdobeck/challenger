@@ -3,11 +3,6 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/lib/server/db/schema';
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-	throw new Error('DATABASE_URL is not set (copy .env.example to .env and fill it in; Playwright loads .env automatically)');
-}
-
 const SEED_PASSWORD = 'password123';
 
 async function loginAs(page: Page, email: string) {
@@ -18,6 +13,15 @@ async function loginAs(page: Page, email: string) {
 }
 
 test('the first 3 seeded users can log in successfully', async ({ page }) => {
+	// Real-auth flow against the seeded database — demo mode has no DB and
+	// auto-authenticates as Max, so there's nothing here to exercise.
+	test.skip(process.env.DEMO_MODE === 'true', 'requires a seeded database, N/A in demo mode');
+
+	const DATABASE_URL = process.env.DATABASE_URL;
+	if (!DATABASE_URL) {
+		throw new Error('DATABASE_URL is not set (copy .env.example to .env and fill it in; Playwright loads .env automatically)');
+	}
+
 	const client = postgres(DATABASE_URL);
 	const db = drizzle(client, { schema });
 
