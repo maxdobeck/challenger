@@ -8,6 +8,20 @@
         "@sveltejs/mcp"
       ],
       "env": {}
+    },
+    "launchdarkly": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@launchdarkly/mcp-server@latest",
+        "start",
+        "--api-key",
+        "${LAUNCHDARKLY_ACCESS_TOKEN}",
+        "--scope",
+        "write"
+      ],
+      "env": {}
     }
   }
 }
