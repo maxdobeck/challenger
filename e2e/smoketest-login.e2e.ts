@@ -33,7 +33,9 @@ test('the first 3 seeded users can log in successfully', async ({ page }) => {
 		await loginAs(page, user.email);
 
 		await expect(page).toHaveURL(/\/leaderboard/);
-		await expect(page.getByText(user.name, { exact: true })).toBeVisible();
+		// Scope to the masthead: the name also appears as a leaderboard row link,
+		// so an unscoped exact-text match is ambiguous.
+		await expect(page.locator('.site-header').getByText(user.name, { exact: true })).toBeVisible();
 
 		await page.getByRole('button', { name: 'Sign out' }).click();
 		await expect(page).toHaveURL(/\/login/);

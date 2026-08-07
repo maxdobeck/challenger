@@ -44,6 +44,11 @@
 			class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
 			>Leaderboard</a
 		>
+		<a
+			href="/tournaments"
+			class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
+			>Tournaments</a
+		>
 	</nav>
 {/if}
 
