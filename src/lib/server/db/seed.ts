@@ -3,11 +3,12 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { faker } from '@faker-js/faker';
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
 import * as schema from './schema';
-import { team, match } from './schema';
+import { team, match, tournament, tournamentAttendee } from './schema';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error('DATABASE_URL is not set (run via `npm run db:seed`)');
@@ -91,17 +92,51 @@ const FAKE_PLAYERS = [
 const STATIC_USER_MATCH_COUNT = 23;
 const RANDOM_MATCH_COUNT_RANGE: [number, number] = [12, 53];
 
-const TOURNAMENT_NAMES = [
-	'Winter Championship',
-	'Local RTT',
-	'Round 3 Open',
-	'Spring Skirmish',
-	'Regional Qualifier',
-	'Friday Night Kill Team',
+// Number of fake tournaments to generate with faker.js.
+const TOURNAMENT_COUNT = 453;
+
+const TOURNAMENT_SUFFIXES = [
+	'Championship',
+	'Open',
+	'RTT',
 	'Grand Clash',
-	null,
-	null
+	'Skirmish',
+	'Qualifier',
+	'Invitational',
+	'Cup',
+	'Showdown',
+	'Masters'
 ];
+
+const VENUE_TYPES = [
+	'Convention Center',
+	'Game Hall',
+	'Legion Post',
+	'Arena',
+	'Community Center',
+	'Wargaming Club',
+	'Expo Center'
+];
+
+// Builds one fake tournament. Dates are 'YYYY-MM-DD' strings for the Postgres
+// `date` columns (drizzle's date column is string-mode by default). End date is
+// the same day or up to two days after the start.
+function fakeTournament() {
+	const start = faker.date.between({ from: '2025-01-01', to: '2026-12-31' });
+	const end = new Date(start);
+	end.setDate(end.getDate() + faker.number.int({ min: 0, max: 2 }));
+	const toISODate = (d: Date) => d.toISOString().slice(0, 10);
+
+	const city = faker.location.city();
+	return {
+		name: `${city} ${faker.helpers.arrayElement(TOURNAMENT_SUFFIXES)}`,
+		startDate: toISODate(start),
+		endDate: toISODate(end),
+		location: `${faker.company.name()} ${faker.helpers.arrayElement(VENUE_TYPES)}`,
+		address: `${faker.location.streetAddress()}, ${city}, ${faker.location.state({ abbreviated: true })} ${faker.location.zipCode()}`,
+		details: faker.lorem.sentences({ min: 1, max: 3 })
+	};
+}
 
 function randomItem<T>(items: T[]): T {
 	return items[Math.floor(Math.random() * items.length)];
@@ -181,14 +216,62 @@ async function seedUsers() {
 	return { staticUserId: staticUser.id, userIds };
 }
 
+async function seedTournaments(staticUserId: string) {
+	// Cleared and regenerated every run. Attendees cascade-delete with the
+	// tournament; existing matches keep their row but have tournament_id set to
+	// null (FK onDelete: 'set null') — they're re-seeded below regardless.
+	await db.delete(tournamentAttendee);
+	await db.delete(tournament);
+
+	const values = Array.from({ length: TOURNAMENT_COUNT }, () => ({
+		...fakeTournament(),
+		createdById: staticUserId
+	}));
+	await db.insert(tournament).values(values);
+
+	const tournaments = await db.select().from(tournament);
+	console.log(`Tournaments: ${tournaments.length} inserted.`);
+	return tournaments;
+}
+
+async function seedAttendees(
+	staticUserId: string,
+	userIds: string[],
+	tournaments: Array<{ id: number }>
+) {
+	const rows: Array<typeof tournamentAttendee.$inferInsert> = [];
+
+	for (const t of tournaments) {
+		// Register a random subset of players per tournament. Max is added to a
+		// random ~25% of events so the static account has tournaments to show.
+		const attendees = new Set(faker.helpers.arrayElements(userIds, { min: 2, max: 12 }));
+		if (faker.datatype.boolean(0.25)) {
+			attendees.add(staticUserId);
+		}
+		for (const userId of attendees) {
+			rows.push({ tournamentId: t.id, userId });
+		}
+	}
+
+	await db.insert(tournamentAttendee).values(rows);
+	console.log(`Attendees: ${rows.length} registrations across ${tournaments.length} tournaments.`);
+}
+
 async function seedMatches(
 	staticUserId: string,
 	userIds: string[],
-	teams: Array<{ id: number; name: string }>
+	teams: Array<{ id: number; name: string }>,
+	tournaments: Array<{ id: number }>
 ) {
 	// Regenerated every run so per-user match counts always match the current
 	// targets below, rather than accumulating from whatever a prior run left.
 	await db.delete(match);
+
+	// ~40% of matches are tied to a tournament; the rest are casual (null).
+	const tournamentIds = tournaments.map((t) => t.id);
+	function randomTournamentId(): number | null {
+		return Math.random() < 0.4 ? randomItem(tournamentIds) : null;
+	}
 
 	const rows: Array<typeof match.$inferInsert> = [];
 
@@ -212,7 +295,7 @@ async function seedMatches(
 				player2Id,
 				player1TeamId: player1Team.id,
 				player2TeamId: player2Team.id,
-				tournament: randomItem(TOURNAMENT_NAMES),
+				tournamentId: randomTournamentId(),
 				player1Crit: p1.crit,
 				player1Tac: p1.tac,
 				player1Kill: p1.kill,
@@ -233,7 +316,9 @@ async function seedMatches(
 async function main() {
 	const teams = await seedTeams();
 	const { staticUserId, userIds } = await seedUsers();
-	await seedMatches(staticUserId, userIds, teams);
+	const tournaments = await seedTournaments(staticUserId);
+	await seedAttendees(staticUserId, userIds, tournaments);
+	await seedMatches(staticUserId, userIds, teams, tournaments);
 
 	console.log('\nSeed complete.');
 	console.log(`Static login -> email: ${STATIC_USER.email}, password: ${SEED_PASSWORD}`);

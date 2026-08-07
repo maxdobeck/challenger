@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, text, timestamp, date, primaryKey } from 'drizzle-orm/pg-core';
 import { user } from './auth.schema';
 
 export const task = pgTable('task', {
@@ -11,6 +11,32 @@ export const team = pgTable('team', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull().unique()
 });
+
+export const tournament = pgTable('tournament', {
+	id: serial('id').primaryKey(),
+	name: text('name').notNull(),
+	startDate: date('start_date').notNull(),
+	endDate: date('end_date').notNull(),
+	location: text('location').notNull(),
+	address: text('address'),
+	details: text('details'),
+	createdById: text('created_by_id').references(() => user.id, { onDelete: 'set null' }),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+export const tournamentAttendee = pgTable(
+	'tournament_attendee',
+	{
+		tournamentId: integer('tournament_id')
+			.notNull()
+			.references(() => tournament.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow()
+	},
+	(table) => [primaryKey({ columns: [table.tournamentId, table.userId] })]
+);
 
 export const match = pgTable('match', {
 	id: serial('id').primaryKey(),
@@ -26,7 +52,9 @@ export const match = pgTable('match', {
 	player2TeamId: integer('player2_team_id')
 		.notNull()
 		.references(() => team.id),
-	tournament: text('tournament'),
+	tournamentId: integer('tournament_id').references(() => tournament.id, {
+		onDelete: 'set null'
+	}),
 	player1Crit: integer('player1_crit').notNull().default(0),
 	player1Tac: integer('player1_tac').notNull().default(0),
 	player1Kill: integer('player1_kill').notNull().default(0),
