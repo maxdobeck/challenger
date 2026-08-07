@@ -101,6 +101,16 @@ h1 {
 	background: rgba(255, 255, 255, 0.15);
 }
 
+.site-header .demo-badge {
+	border: 1px solid rgba(255, 255, 255, 0.7);
+	padding: 0.35rem 0.9rem;
+	border-radius: 2px;
+	font-size: 0.85rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
 /* Secondary nav strip: black bar, links divided by thin hairlines */
 .site-subnav {
 	background: var(--color-subnav-bg);

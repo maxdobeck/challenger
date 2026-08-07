@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { betterAuth } from 'better-auth/minimal';
@@ -8,6 +5,18 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
 import * as schema from './schema';
 import { team, match } from './schema';
+import {
+	STATIC_USER,
+	teamNames,
+	FAKE_PLAYERS,
+	STATIC_USER_MATCH_COUNT,
+	RANDOM_MATCH_COUNT_RANGE,
+	TOURNAMENT_NAMES,
+	randomItem,
+	randomInt,
+	randomPastDate,
+	randomScoreSet
+} from './demo-fixtures';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) throw new Error('DATABASE_URL is not set (run via `npm run db:seed`)');
@@ -24,110 +33,6 @@ const auth = betterAuth({
 });
 
 const SEED_PASSWORD = 'password123';
-
-// Fixed, predictable account for local testing — always seeded with the same
-// name/email/password so you can reliably log in as "max".
-const STATIC_USER = { name: 'Max', email: 'max@killteam.example' };
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const teamNames = readFileSync(path.resolve(__dirname, '../../../../teams.txt'), 'utf-8')
-	.split('\n')
-	.map((line) => line.trim())
-	.filter(Boolean);
-
-const FAKE_PLAYERS = [
-	'Kaelen Voss',
-	'Ilsa Draven',
-	'Torvin Steelgaze',
-	'Bren Ashwalker',
-	'Ceria Nightbloom',
-	'Doran Ferrocast',
-	'Elowen Grimvale',
-	'Fenric Coldbane',
-	'Garrick Emberfall',
-	'Hesper Wraithmoor',
-	'Ivor Blackquill',
-	'Junia Starcarver',
-	'Korrin Duskbringer',
-	'Lyra Ashenveil',
-	'Magnus Thornwick',
-	'Nadia Frostgrip',
-	'Orin Slatehand',
-	'Petra Ironvale',
-	'Quill Marrowsworth',
-	'Rhoswen Bladecaller',
-	'Silas Graven',
-	'Talia Ravencrest',
-	'Ursin Hollowpeak',
-	'Vesper Ninegold',
-	'Wren Duskhollow',
-	'Xandra Emberlyn',
-	'Yorick Stonefell',
-	'Zara Nightwind',
-	'Aldric Thornbury',
-	'Brienne Ashcroft',
-	'Corvin Blackwood',
-	'Daria Frostvale',
-	'Edrin Ravenscar',
-	'Freya Ironheart',
-	'Gideon Marrowfell',
-	'Halcyon Vex',
-	'Isolde Graymoor',
-	'Jorund Blackpeak',
-	'Kestrel Dawnshade',
-	'Liora Winterhall',
-	'Marek Ashenhollow',
-	'Nyra Coldwater',
-	'Oswin Blackthorn',
-	'Riven Duskgale',
-	'Seraphine Vaultwright',
-	'Thane Grimhold',
-	'Una Stormcaller',
-	'Vance Hollowmere'
-];
-
-// Match-count targets: Max always gets exactly this many, everyone else gets
-// a random count in the range below (as their own logged, player1 matches).
-const STATIC_USER_MATCH_COUNT = 23;
-const RANDOM_MATCH_COUNT_RANGE: [number, number] = [12, 53];
-
-const TOURNAMENT_NAMES = [
-	'Winter Championship',
-	'Local RTT',
-	'Round 3 Open',
-	'Spring Skirmish',
-	'Regional Qualifier',
-	'Friday Night Kill Team',
-	'Grand Clash',
-	null,
-	null
-];
-
-function randomItem<T>(items: T[]): T {
-	return items[Math.floor(Math.random() * items.length)];
-}
-
-function randomInt(min: number, max: number): number {
-	return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function randomPastDate(daysBack: number): Date {
-	const now = Date.now();
-	const past = now - randomInt(0, daysBack) * 24 * 60 * 60 * 1000;
-	return new Date(past);
-}
-
-// Kill Team VP categories (crit/tac/kill) range 0-6. Primary is derived from a
-// randomly chosen one of those three, for seeding purposes only: primary =
-// ceil(base / 2), so it ranges 0-3.
-function randomScoreSet() {
-	const crit = randomInt(0, 6);
-	const tac = randomInt(0, 6);
-	const kill = randomInt(0, 6);
-	const base = randomItem([crit, tac, kill]);
-	const primary = Math.ceil(base / 2);
-	return { crit, tac, kill, primary };
-}
 
 async function seedTeams() {
 	const existing = await db.select({ name: team.name }).from(team);

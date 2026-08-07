@@ -18,9 +18,13 @@
 	<div class="account">
 		{#if data.user}
 			<span>{data.user.name}</span>
-			<form method="post" action="/logout" use:enhance>
-				<button type="submit">Sign out</button>
-			</form>
+			{#if data.demoMode}
+				<span class="demo-badge">Demo Mode</span>
+			{:else}
+				<form method="post" action="/logout" use:enhance>
+					<button type="submit">Sign out</button>
+				</form>
+			{/if}
 		{:else}
 			<a href="/login">Login</a>
 		{/if}

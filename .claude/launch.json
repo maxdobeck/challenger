@@ -7,6 +7,13 @@
 			"runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:$PATH; exec npm run dev -- --port $PORT"],
 			"port": 5173,
 			"autoPort": true
+		},
+		{
+			"name": "challenger-demo",
+			"runtimeExecutable": "/bin/bash",
+			"runtimeArgs": ["-c", "export PATH=/opt/homebrew/bin:$PATH; exec npm run dev:demo -- --port $PORT"],
+			"port": 5174,
+			"autoPort": true
 		}
 	]
 }

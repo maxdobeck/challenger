@@ -2,8 +2,12 @@ import { fail, redirect } from '@sveltejs/kit';
 import { desc, eq, ne, or } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Actions, PageServerLoad } from './$types';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { match, team, user } from '$lib/server/db/schema';
+import { addDemoMatch, getDemoOpponents, getDemoTeams, getDemoUserMatchRows } from '$lib/server/demo/data';
+
+const DEMO_MODE = env.DEMO_MODE === 'true';
 
 const player1Team = alias(team, 'player1_team');
 const player2Team = alias(team, 'player2_team');
@@ -16,40 +20,44 @@ export const load: PageServerLoad = async (event) => {
 		return redirect(302, '/login');
 	}
 
-	const teams = await db.select().from(team).orderBy(team.name);
-	const opponents = await db
-		.select({ id: user.id, name: user.name })
-		.from(user)
-		.where(ne(user.id, currentUser.id))
-		.orderBy(user.name);
+	const teams = DEMO_MODE ? getDemoTeams() : await db.select().from(team).orderBy(team.name);
+	const opponents = DEMO_MODE
+		? getDemoOpponents(currentUser.id)
+		: await db
+				.select({ id: user.id, name: user.name })
+				.from(user)
+				.where(ne(user.id, currentUser.id))
+				.orderBy(user.name);
 
-	const rows = await db
-		.select({
-			id: match.id,
-			tournament: match.tournament,
-			playedAt: match.playedAt,
-			player1Id: match.player1Id,
-			player2Id: match.player2Id,
-			player1Name: player1User.name,
-			player2Name: player2User.name,
-			player1TeamName: player1Team.name,
-			player2TeamName: player2Team.name,
-			player1Crit: match.player1Crit,
-			player1Tac: match.player1Tac,
-			player1Kill: match.player1Kill,
-			player1Primary: match.player1Primary,
-			player2Crit: match.player2Crit,
-			player2Tac: match.player2Tac,
-			player2Kill: match.player2Kill,
-			player2Primary: match.player2Primary
-		})
-		.from(match)
-		.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
-		.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
-		.innerJoin(player1User, eq(match.player1Id, player1User.id))
-		.innerJoin(player2User, eq(match.player2Id, player2User.id))
-		.where(or(eq(match.player1Id, currentUser.id), eq(match.player2Id, currentUser.id)))
-		.orderBy(desc(match.playedAt));
+	const rows = DEMO_MODE
+		? getDemoUserMatchRows(currentUser.id)
+		: await db
+				.select({
+					id: match.id,
+					tournament: match.tournament,
+					playedAt: match.playedAt,
+					player1Id: match.player1Id,
+					player2Id: match.player2Id,
+					player1Name: player1User.name,
+					player2Name: player2User.name,
+					player1TeamName: player1Team.name,
+					player2TeamName: player2Team.name,
+					player1Crit: match.player1Crit,
+					player1Tac: match.player1Tac,
+					player1Kill: match.player1Kill,
+					player1Primary: match.player1Primary,
+					player2Crit: match.player2Crit,
+					player2Tac: match.player2Tac,
+					player2Kill: match.player2Kill,
+					player2Primary: match.player2Primary
+				})
+				.from(match)
+				.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
+				.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
+				.innerJoin(player1User, eq(match.player1Id, player1User.id))
+				.innerJoin(player2User, eq(match.player2Id, player2User.id))
+				.where(or(eq(match.player1Id, currentUser.id), eq(match.player2Id, currentUser.id)))
+				.orderBy(desc(match.playedAt));
 
 	const matches = rows.map((r) => {
 		const youArePlayer1 = r.player1Id === currentUser.id;
@@ -110,7 +118,7 @@ export const actions: Actions = {
 			return fail(400, { message: 'Opponent and both teams are required.' });
 		}
 
-		await db.insert(match).values({
+		const values = {
 			player1Id: currentUser.id,
 			player2Id: opponentId,
 			player1TeamId,
@@ -124,7 +132,13 @@ export const actions: Actions = {
 			player2Tac: parseScore(formData, 'player2Tac'),
 			player2Kill: parseScore(formData, 'player2Kill'),
 			player2Primary: parseScore(formData, 'player2Primary')
-		});
+		};
+
+		if (DEMO_MODE) {
+			addDemoMatch(values);
+		} else {
+			await db.insert(match).values(values);
+		}
 
 		return { success: true };
 	}

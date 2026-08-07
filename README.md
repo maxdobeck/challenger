@@ -4,6 +4,8 @@ A Kill Team tournament tracker — login, the full team list, player-vs-player m
 
 Built with SvelteKit, Drizzle ORM + Postgres, and better-auth.
 
+> **Want to try it with zero setup?** Run it in demo mode: frontend only, no infrastructure required. `npm install && npm run dev:demo` and you're in — see [Demo mode](#demo-mode) below.
+
 ## Quickstart
 
 Once you've cloned the repo, installed dependencies, and set up `.env` (see below), start everything — database, migrations, seed data, and the dev server — with one command:
@@ -13,6 +15,15 @@ npm run launch
 ```
 
 That's `db:up` (starts Postgres in the background via Docker) → `db:migrate` → `db:seed` → `dev`, chained together. It's safe to re-run any time; migrations and seeding are both idempotent.
+
+## Demo mode
+
+```sh
+npm install
+npm run dev:demo
+```
+
+No Docker, no Postgres, no `.env` file — `npm run dev:demo` runs the app entirely against an in-memory dataset baked into the server code (same team list and match-generation logic as the real seed script, just not written to a database). You land straight on the leaderboard, auto-logged-in as "Max"; logging a new match works too, but it only lives for the life of that server process — restart and it's back to the baseline dataset. Use `npm run dev` / `npm run launch` (below) for the real, Postgres-backed app.
 
 ## First-time setup
 
@@ -46,6 +57,7 @@ The seed script (`src/lib/server/db/seed.ts`) creates:
 | --- | --- |
 | `npm run launch` | Start the database, run migrations, seed data, and start the dev server — all in one go |
 | `npm run dev` | Start just the dev server (`-- --open` to open a browser tab) |
+| `npm run dev:demo` | Start the dev server in [demo mode](#demo-mode) — no database required |
 | `npm run db:up` | Start Postgres in the background (`docker compose up -d`) |
 | `npm run db:start` | Start Postgres in the foreground, logs attached |
 | `npm run db:migrate` | Apply pending Drizzle migrations |
