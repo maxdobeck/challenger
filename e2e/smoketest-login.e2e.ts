@@ -5,7 +5,7 @@ import * as schema from '../src/lib/server/db/schema';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 if (!DATABASE_URL) {
-	throw new Error('DATABASE_URL is not set (run with e.g. `npm run test:e2e --env-file=.env`)');
+	throw new Error('DATABASE_URL is not set (copy .env.example to .env and fill it in; Playwright loads .env automatically)');
 }
 
 const SEED_PASSWORD = 'password123';
