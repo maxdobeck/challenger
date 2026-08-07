@@ -2,10 +2,12 @@
 	"$schema": "https://openapi.vercel.sh/vercel.json",
 	"build": {
 		"env": {
-			"DEMO_MODE": "true"
+			"DEMO_MODE": "true",
+			"BETTER_AUTH_SECRET": "demo-mode-not-a-real-secret"
 		}
 	},
 	"env": {
-		"DEMO_MODE": "true"
+		"DEMO_MODE": "true",
+		"BETTER_AUTH_SECRET": "demo-mode-not-a-real-secret"
 	}
 }

@@ -1,12 +1,18 @@
 import { existsSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
 
-// E2E runs against the demo build: loading .env.demo into process.env sets
-// DEMO_MODE=true (and the demo ORIGIN/secret) so the build + preview servers —
-// and the test files — run with no database. This matches CI, where there is no
-// .env or Postgres. Real-auth tests that need a seeded DB skip themselves when
-// DEMO_MODE is set (see smoketest-login / login-as-max).
-if (existsSync('.env.demo')) {
+// The suite runs in whichever mode is configured:
+//   - Real database: provide DATABASE_URL (a local .env, or CI's "database"
+//     job) and the app runs against Postgres with real auth.
+//   - Demo mode: with no DATABASE_URL, load .env.demo so the build + preview
+//     servers and the test files run with DEMO_MODE=true and no database (CI's
+//     "demo" job, and the default for a fresh checkout).
+// Real-auth-only tests (login-as-max, smoketest-login) skip themselves when
+// DEMO_MODE is set.
+if (existsSync('.env')) {
+	process.loadEnvFile('.env');
+}
+if (!process.env.DATABASE_URL && existsSync('.env.demo')) {
 	process.loadEnvFile('.env.demo');
 }
 
