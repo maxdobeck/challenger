@@ -3,11 +3,13 @@
 	"build": {
 		"env": {
 			"DEMO_MODE": "true",
-			"BETTER_AUTH_SECRET": "demo-mode-not-a-real-secret"
+			"BETTER_AUTH_SECRET": "demo-mode-not-a-real-secret",
+			"PUBLIC_LD_CLIENT_ID": "6a761baeb7c4670ad5fc4aee"
 		}
 	},
 	"env": {
 		"DEMO_MODE": "true",
-		"BETTER_AUTH_SECRET": "demo-mode-not-a-real-secret"
+		"BETTER_AUTH_SECRET": "demo-mode-not-a-real-secret",
+		"PUBLIC_LD_CLIENT_ID": "6a761baeb7c4670ad5fc4aee"
 	}
 }

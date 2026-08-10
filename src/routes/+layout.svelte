@@ -8,7 +8,8 @@
 		identifyUser,
 		resetToAnonymous,
 		flags,
-		ldContextKey
+		ldContextKey,
+		ldReady
 	} from '$lib/stores/launchdarkly';
 	import { buildMultiContext } from '$lib/launchdarkly/context';
 	import { page } from '$app/state';
@@ -41,6 +42,13 @@
 	});
 
 	$effect(() => {
+		// Wait until the LD client has finished initializing before identifying.
+		// Otherwise identifyUser() can run while `client` is still null (it silently
+		// no-ops), yet identifiedKey is already set, so it never retries and we're
+		// stuck on the anonymous context. In demo mode the user is present from the
+		// very first render, so this race always lost there. Depending on $ldReady
+		// re-runs this effect once the client is ready.
+		if (!$ldReady) return;
 		if (data.user && identifiedKey !== data.user.id) {
 			identifiedKey = data.user.id;
 			identifyUser(

@@ -1,12 +1,12 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { and, count, eq, isNotNull, or } from 'drizzle-orm';
+import { and, count, eq, isNotNull, or, sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import { faker } from '@faker-js/faker';
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
 import * as schema from './schema';
-import { team, match, tournament, tournamentAttendee, userProfile } from './schema';
+import { team, match, tournament, tournamentAttendee, user, userProfile } from './schema';
 import {
 	STATIC_USER,
 	TEST_USER,
@@ -104,9 +104,25 @@ async function seedUser(name: string, email: string) {
 		});
 		return { id: result.user.id, created: true };
 	} catch (error) {
-		if (error instanceof APIError) {
+		// Detect "user already exists" by the error's shape, not `instanceof
+		// APIError`: better-auth throws its own APIError class instance, which
+		// isn't the same constructor we import here (ESM/CJS duplication), so
+		// instanceof is unreliable across the module boundary.
+		const code =
+			error instanceof APIError
+				? error.body?.code
+				: (error as { body?: { code?: string } } | null)?.body?.code;
+		if (code === 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL') {
 			// Already exists from a previous seed run — look up the id instead.
-			const existing = await db.query.user.findFirst({ where: (u, { eq }) => eq(u.email, email) });
+			// Plain select rather than the relational query builder: db.query.user
+			// can come back empty here depending on schema-registration timing.
+			// Case-insensitive match because better-auth lowercases emails on
+			// signup (e.g. testTourney@… is stored as testtourney@…).
+			const [existing] = await db
+				.select({ id: user.id })
+				.from(user)
+				.where(eq(sql`lower(${user.email})`, email.toLowerCase()))
+				.limit(1);
 			if (!existing) throw error;
 			return { id: existing.id, created: false };
 		}
@@ -170,95 +186,119 @@ async function seedTournaments(staticUserId: string) {
 }
 
 async function seedAttendees(
-	staticUserId: string,
 	userIds: string[],
-	tournaments: Array<{ id: number }>
-) {
-	const rows: Array<typeof tournamentAttendee.$inferInsert> = [];
+	tournaments: Array<{ id: number }>,
+	casualOnlyIds: Set<string>,
+	tournamentForcedIds: Set<string>
+): Promise<Map<number, string[]>> {
+	// Casual-only accounts (Max, test1) are never registered for a tournament, so
+	// they can never pick up a tournament match below.
+	const eligible = userIds.filter((id) => !casualOnlyIds.has(id));
+	const forced = [...tournamentForcedIds];
 
-	for (const t of tournaments) {
-		// Register a random subset of players per tournament. Max is added to a
-		// random ~25% of events so the static account has tournaments to show.
-		const attendees = new Set(faker.helpers.arrayElements(userIds, { min: 2, max: 12 }));
-		if (faker.datatype.boolean(0.25)) {
-			attendees.add(staticUserId);
+	const rows: Array<typeof tournamentAttendee.$inferInsert> = [];
+	const attendeesByTournament = new Map<number, string[]>();
+
+	tournaments.forEach((t, idx) => {
+		// Register a random subset of eligible players per tournament.
+		const attendees = new Set(faker.helpers.arrayElements(eligible, { min: 2, max: 12 }));
+		// Guarantee the tournament-forced account(s) attend plenty of events (and at
+		// least the first few) so their hasPlayedTournament attribute is always true.
+		if (idx < 3 || faker.datatype.boolean(0.3)) {
+			for (const id of forced) attendees.add(id);
 		}
-		for (const userId of attendees) {
+		const ids = [...attendees];
+		attendeesByTournament.set(t.id, ids);
+		for (const userId of ids) {
 			rows.push({ tournamentId: t.id, userId });
 		}
-	}
+	});
 
 	await db.insert(tournamentAttendee).values(rows);
 	console.log(`Attendees: ${rows.length} registrations across ${tournaments.length} tournaments.`);
+	return attendeesByTournament;
 }
 
 async function seedMatches(
 	staticUserId: string,
 	userIds: string[],
 	teams: Array<{ id: number; name: string }>,
-	tournaments: Array<{ id: number }>,
-	casualOnlyIds: Set<string>,
+	attendeesByTournament: Map<number, string[]>,
 	tournamentForcedIds: Set<string>
 ) {
 	// Regenerated every run so per-user match counts always match the current
 	// targets below, rather than accumulating from whatever a prior run left.
 	await db.delete(match);
 
-	// ~40% of matches are tied to a tournament; the rest are casual (null).
-	// Any match involving a "casual-only" account (Max, test1) is forced casual
-	// so those users have zero tournament matches — hasPlayedTournament stays
-	// false for them, giving the LD segment a real split to target. The inverse
-	// "tournament-forced" accounts (testTourney) get every match tied to a
-	// tournament, so hasPlayedTournament is always true across many events.
-	// Casual-only wins ties: a testTourney-vs-Max match stays casual, keeping
-	// Max/test1 tournament-free.
-	const tournamentIds = tournaments.map((t) => t.id);
-	function pickTournamentId(player1Id: string, player2Id: string): number | null {
-		if (casualOnlyIds.has(player1Id) || casualOnlyIds.has(player2Id)) return null;
-		if (tournamentForcedIds.has(player1Id) || tournamentForcedIds.has(player2Id)) {
-			return randomItem(tournamentIds);
-		}
-		return Math.random() < 0.4 ? randomItem(tournamentIds) : null;
-	}
-
 	const rows: Array<typeof match.$inferInsert> = [];
 
+	// Build one match row with random teams/scores/date; the caller decides the
+	// players and whether it's tied to a tournament.
+	function buildMatch(player1Id: string, player2Id: string, tournamentId: number | null) {
+		const player1Team = randomItem(teams);
+		const player2Team = randomItem(teams);
+		const p1 = randomScoreSet();
+		const p2 = randomScoreSet();
+		rows.push({
+			player1Id,
+			player2Id,
+			player1TeamId: player1Team.id,
+			player2TeamId: player2Team.id,
+			tournamentId,
+			player1Crit: p1.crit,
+			player1Tac: p1.tac,
+			player1Kill: p1.kill,
+			player1Primary: p1.primary,
+			player2Crit: p2.crit,
+			player2Tac: p2.tac,
+			player2Kill: p2.kill,
+			player2Primary: p2.primary,
+			playedAt: randomPastDate(180)
+		});
+	}
+
+	// Tournament matches: each event plays ceil(attendees / 2) matches, pairing its
+	// attendees so everyone plays at least once (an odd attendee out gets a rematch).
+	// Casual-only accounts (Max, test1) are never attendees, so they never appear here
+	// and their hasPlayedTournament attribute stays false.
+	let tournamentMatches = 0;
+	for (const [tournamentId, attendeeIds] of attendeesByTournament) {
+		if (attendeeIds.length < 2) continue;
+		const shuffled = faker.helpers.shuffle([...attendeeIds]);
+		const matchCount = Math.ceil(shuffled.length / 2);
+		for (let k = 0; k < matchCount; k++) {
+			const player1Id = shuffled[2 * k];
+			let player2Id = shuffled[2 * k + 1];
+			if (player2Id === undefined) {
+				player2Id = randomItem(shuffled);
+				while (player2Id === player1Id) player2Id = randomItem(shuffled);
+			}
+			buildMatch(player1Id, player2Id, tournamentId);
+			tournamentMatches++;
+		}
+	}
+
+	// Casual match history (never tied to a tournament). Tournament-forced accounts
+	// (testTourney) are skipped entirely, so every match they appear in is a
+	// tournament match and hasPlayedTournament is always true for them.
+	const casualOpponents = userIds.filter((id) => !tournamentForcedIds.has(id));
+	let casualMatches = 0;
 	for (const player1Id of userIds) {
+		if (tournamentForcedIds.has(player1Id)) continue;
 		const targetGames =
 			player1Id === staticUserId ? STATIC_USER_MATCH_COUNT : randomInt(...RANDOM_MATCH_COUNT_RANGE);
-
 		for (let i = 0; i < targetGames; i++) {
-			let player2Id = randomItem(userIds);
-			while (player2Id === player1Id) {
-				player2Id = randomItem(userIds);
-			}
-
-			const player1Team = randomItem(teams);
-			const player2Team = randomItem(teams);
-			const p1 = randomScoreSet();
-			const p2 = randomScoreSet();
-
-			rows.push({
-				player1Id,
-				player2Id,
-				player1TeamId: player1Team.id,
-				player2TeamId: player2Team.id,
-				tournamentId: pickTournamentId(player1Id, player2Id),
-				player1Crit: p1.crit,
-				player1Tac: p1.tac,
-				player1Kill: p1.kill,
-				player1Primary: p1.primary,
-				player2Crit: p2.crit,
-				player2Tac: p2.tac,
-				player2Kill: p2.kill,
-				player2Primary: p2.primary,
-				playedAt: randomPastDate(180)
-			});
+			let player2Id = randomItem(casualOpponents);
+			while (player2Id === player1Id) player2Id = randomItem(casualOpponents);
+			buildMatch(player1Id, player2Id, null);
+			casualMatches++;
 		}
 	}
 
 	await db.insert(match).values(rows);
-	console.log(`Matches: ${rows.length} inserted (Max: ${STATIC_USER_MATCH_COUNT}, others: ${RANDOM_MATCH_COUNT_RANGE[0]}-${RANDOM_MATCH_COUNT_RANGE[1]} each, as their own logged games).`);
+	console.log(
+		`Matches: ${rows.length} inserted (${tournamentMatches} tournament, ${casualMatches} casual).`
+	);
 }
 
 // Precompute LaunchDarkly attributes for every user from the match table.
@@ -296,17 +336,17 @@ async function main() {
 	const teams = await seedTeams();
 	const { staticUserId, testUserId, tourneyUserId, userIds } = await seedUsers();
 	const tournaments = await seedTournaments(staticUserId);
-	await seedAttendees(staticUserId, userIds, tournaments);
-	// Max and test1 are kept tournament-free so hasPlayedTournament is false for
-	// them; testTourney is forced tournament-only so hasPlayedTournament is true.
-	await seedMatches(
-		staticUserId,
+	// Max and test1 are kept tournament-free (never attendees) so hasPlayedTournament
+	// is false for them; testTourney is forced tournament-only so it's always true.
+	const casualOnlyIds = new Set([staticUserId, testUserId]);
+	const tournamentForcedIds = new Set([tourneyUserId]);
+	const attendeesByTournament = await seedAttendees(
 		userIds,
-		teams,
 		tournaments,
-		new Set([staticUserId, testUserId]),
-		new Set([tourneyUserId])
+		casualOnlyIds,
+		tournamentForcedIds
 	);
+	await seedMatches(staticUserId, userIds, teams, attendeesByTournament, tournamentForcedIds);
 	await seedUserProfiles();
 
 	console.log('\nSeed complete.');

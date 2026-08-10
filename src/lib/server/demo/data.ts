@@ -115,34 +115,84 @@ for (let i = 1; i <= DEMO_TOURNAMENT_COUNT; i++) {
 	});
 }
 
-const tournamentIds = demoTournaments.map((t) => t.id);
-
-// ~40% of matches are tied to a tournament; the rest are casual (null) — mirrors
-// the real seed's distribution (seed.ts).
-function randomTournamentId(): number | null {
-	return rng() < 0.4 ? randomItem(tournamentIds, rng) : null;
-}
-
-// Register a random subset of players per tournament, biasing Max into ~35% of
-// events so the static demo account always has tournaments to show.
+// Register a random subset of players per tournament. Max is never an attendee —
+// he's the demo's "no tournaments yet" persona, so his By-Tournament stats stay
+// empty and the "Matchmake Now!" button shows for him.
+const nonMaxUsers = demoUsers.filter((u) => u.id !== MAX_ID);
 export const demoAttendees: DemoAttendee[] = [];
 for (const t of demoTournaments) {
 	const target = randomInt(2, 12, rng);
 	const chosen = new Set<string>();
 	while (chosen.size < target) {
-		chosen.add(randomItem(demoUsers, rng).id);
-	}
-	if (rng() < 0.35) {
-		chosen.add(MAX_ID);
+		chosen.add(randomItem(nonMaxUsers, rng).id);
 	}
 	for (const userId of chosen) {
 		demoAttendees.push({ tournamentId: t.id, userId, registeredAt: randomPastDate(120, rng) });
 	}
 }
 
+const attendeesByTournament = new Map<number, string[]>();
+for (const a of demoAttendees) {
+	const list = attendeesByTournament.get(a.tournamentId) ?? [];
+	list.push(a.userId);
+	attendeesByTournament.set(a.tournamentId, list);
+}
+
 let nextMatchId = 1;
 export const demoMatches: DemoMatch[] = [];
 
+// Build one match with random teams/scores/date; the caller decides the players
+// and whether it's tied to a tournament.
+function pushDemoMatch(player1Id: string, player2Id: string, tournamentId: number | null) {
+	const player1Team = randomItem(demoTeams, rng);
+	const player2Team = randomItem(demoTeams, rng);
+	const p1 = randomScoreSet(rng);
+	const p2 = randomScoreSet(rng);
+	demoMatches.push({
+		id: nextMatchId++,
+		player1Id,
+		player2Id,
+		player1TeamId: player1Team.id,
+		player2TeamId: player2Team.id,
+		tournamentId,
+		player1Crit: p1.crit,
+		player1Tac: p1.tac,
+		player1Kill: p1.kill,
+		player1Primary: p1.primary,
+		player2Crit: p2.crit,
+		player2Tac: p2.tac,
+		player2Kill: p2.kill,
+		player2Primary: p2.primary,
+		playedAt: randomPastDate(180, rng)
+	});
+}
+
+// Tournament matches: each event plays ceil(attendees / 2) matches, pairing its
+// attendees so everyone plays at least once (an odd attendee out gets a rematch).
+for (const t of demoTournaments) {
+	const attendees = [...(attendeesByTournament.get(t.id) ?? [])];
+	if (attendees.length < 2) continue;
+
+	for (let i = attendees.length - 1; i > 0; i--) {
+		const j = Math.floor(rng() * (i + 1));
+		[attendees[i], attendees[j]] = [attendees[j], attendees[i]];
+	}
+
+	const matchCount = Math.ceil(attendees.length / 2);
+	for (let k = 0; k < matchCount; k++) {
+		const player1Id = attendees[2 * k];
+		let player2Id = attendees[2 * k + 1];
+		if (player2Id === undefined) {
+			player2Id = randomItem(attendees, rng);
+			while (player2Id === player1Id) {
+				player2Id = randomItem(attendees, rng);
+			}
+		}
+		pushDemoMatch(player1Id, player2Id, t.id);
+	}
+}
+
+// Casual match history per user (never tied to a tournament).
 for (const player1 of demoUsers) {
 	const targetGames =
 		player1.id === MAX_ID
@@ -154,29 +204,7 @@ for (const player1 of demoUsers) {
 		while (player2.id === player1.id) {
 			player2 = randomItem(demoUsers, rng);
 		}
-
-		const player1Team = randomItem(demoTeams, rng);
-		const player2Team = randomItem(demoTeams, rng);
-		const p1 = randomScoreSet(rng);
-		const p2 = randomScoreSet(rng);
-
-		demoMatches.push({
-			id: nextMatchId++,
-			player1Id: player1.id,
-			player2Id: player2.id,
-			player1TeamId: player1Team.id,
-			player2TeamId: player2Team.id,
-			tournamentId: randomTournamentId(),
-			player1Crit: p1.crit,
-			player1Tac: p1.tac,
-			player1Kill: p1.kill,
-			player1Primary: p1.primary,
-			player2Crit: p2.crit,
-			player2Tac: p2.tac,
-			player2Kill: p2.kill,
-			player2Primary: p2.primary,
-			playedAt: randomPastDate(180, rng)
-		});
+		pushDemoMatch(player1.id, player2.id, null);
 	}
 }
 

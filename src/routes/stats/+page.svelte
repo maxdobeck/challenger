@@ -1,8 +1,15 @@
 <script lang="ts">
 	import type { PageServerData } from './$types';
 	import SortableTable from '$lib/components/SortableTable.svelte';
+	import { flags } from '$lib/stores/launchdarkly';
 
 	let { data }: { data: PageServerData } = $props();
+
+	// Intentionally throws so the unfinished feature surfaces a real error
+	// (captured by LaunchDarkly Observability / Session Replay).
+	function matchmake() {
+		throw new Error("OOPS this feature isn't working :(");
+	}
 
 	type TeamStat = (typeof data.teamStats)[number];
 	type TournamentStat = (typeof data.tournamentStats)[number];
@@ -35,6 +42,10 @@
 </script>
 
 <h1>{data.viewingOwnStats ? 'My Stats' : `${data.playerName} Stats`}</h1>
+
+{#if $flags['social-matchmake']}
+	<p><button type="button" class="button" onclick={matchmake}>Matchmake Now!</button></p>
+{/if}
 
 <div class="card">
 	{#if data.summary.totalGames === 0}

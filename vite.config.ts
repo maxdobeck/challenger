@@ -4,6 +4,16 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	// Emit sourcemaps without a //# sourceMappingURL comment, so LaunchDarkly
+	// Observability can de-minify production stack traces without serving the
+	// maps to end users. Uploaded to LD from the `vercel-build` script.
+	build: { sourcemap: 'hidden' },
+	// Baked into the client bundle at build time. On Vercel this is the deploy's
+	// git SHA (VERCEL_GIT_COMMIT_SHA), which must match the --app-version used
+	// when uploading sourcemaps so LD can pair errors with the right maps.
+	define: {
+		__APP_VERSION__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev')
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({

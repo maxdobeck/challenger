@@ -1,0 +1,40 @@
+// Kill Team factions used to seed teams (real DB seed + in-memory demo).
+// Previously read from teams.txt via fs; moved to a module so it imports cleanly
+// under Vite (the app, incl. Vercel's serverless runtime) and tsx (the seed
+// script) alike — a runtime fs read isn't reliable once bundled onto Vercel.
+export const teamNames = [
+	'IMPERIAL NAVY BREACHERS',
+	'KASRKIN',
+	'FARSTALKER KINBAND',
+	'HIEROTEK CIRCLE',
+	'EXACTION SQUAD',
+	'HAND OF THE ARCHON',
+	'FELLGOR',
+	'RAVAGERS',
+	'HEARTHKYN SALVAGERS',
+	'INQUISITORIAL AGENTS',
+	'CHAOS CULT',
+	'BLADES OF KHAINE',
+	'SCOUT SQUAD',
+	'NEMESIS CLAW',
+	'MANDRAKES',
+	'BROOD BROTHERS',
+	'HERNKYN YAEGIRS',
+	'TEMPESTUS AQUILONS',
+	'VESPID STINGWINGS',
+	'PLAGUE MARINES',
+	'ANGELS OF DEATH',
+	'RATLINGS',
+	'WRECKA KREW',
+	'GOREMONGERS',
+	'BATTLECLADE',
+	'SANCTIFIERS',
+	'RAVENERS',
+	'DEATHWATCH',
+	'CANOPTEK CIRCLE',
+	'WOLF SCOUTS',
+	'XV26 STEALTH BATTLESUITS',
+	'CELESTIAN INSIDIANTS',
+	'MURDERWING',
+	'SPECTRE SQUAD'
+];
