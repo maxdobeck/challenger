@@ -16,12 +16,27 @@ function skip(reason) {
 	process.exit(0);
 }
 
-if (!token) skip('LD_ACCESS_TOKEN not set');
+// Loud, non-fatal skip for the case that SHOULD upload but can't: a real
+// production/preview deploy missing its token. Uncaught in build logs, this is
+// exactly how a deploy ships with no maps and its errors never de-minify.
+function skipLoud(reason) {
+	console.warn(
+		`[sourcemaps] WARNING — not uploading on a deploy that should have maps: ${reason}. ` +
+			`Stack traces for app-version ${version} will NOT de-minify in LaunchDarkly. ` +
+			`Continuing so the deploy still succeeds.`
+	);
+	process.exit(0);
+}
+
+// Ordered so a genuine misconfiguration is loud: first rule out the non-deploy
+// contexts (local build, non-prod/preview env) with quiet skips, so that a
+// missing token past this point can only mean a real deploy lacks it.
 if (!version) skip('VERCEL_GIT_COMMIT_SHA not set (not a Vercel git build)');
 // Upload for production and preview deploys, so preview URLs de-minify too.
 // Requires LD_ACCESS_TOKEN to be present in the Preview env scope on Vercel.
 const uploadEnvs = ['production', 'preview'];
 if (vercelEnv && !uploadEnvs.includes(vercelEnv)) skip(`VERCEL_ENV=${vercelEnv}, not ${uploadEnvs.join('/')}`);
+if (!token) skipLoud('LD_ACCESS_TOKEN not set — add it to this environment scope in Vercel');
 
 function countMaps(dir) {
 	let total = 0;
