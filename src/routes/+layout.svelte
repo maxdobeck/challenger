@@ -3,7 +3,13 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { enhance } from '$app/forms';
 	import { onMount } from 'svelte';
-	import { initLD, identifyUser, resetToAnonymous } from '$lib/stores/launchdarkly';
+	import {
+		initLD,
+		identifyUser,
+		resetToAnonymous,
+		flags,
+		ldContextKey
+	} from '$lib/stores/launchdarkly';
 	import { buildMultiContext } from '$lib/launchdarkly/context';
 	import type { LayoutServerData } from './$types';
 
@@ -41,8 +47,11 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<header class="site-header">
+<header class="site-header" data-ld-context={$ldContextKey ?? ''}>
 	<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Challenger</a>
+	{#if $flags['tourneys-in-area']}
+		<h2 class="promo-banner">{'{num_tournaments} near you in {nearby_tourn_loc}!'}</h2>
+	{/if}
 	<div class="account">
 		{#if data.user}
 			{#if data.demoMode}
