@@ -1,43 +1,95 @@
-// Uploads client sourcemaps to LaunchDarkly Observability after the Vercel build.
-// Runs from the `vercel-build` npm script. Self-skips (exit 0) whenever the
-// required inputs are absent, and never fails the deploy: a sourcemap-upload
-// problem is logged as a warning, not a build error.
-import { existsSync, readdirSync, statSync } from 'node:fs';
+// Uploads client sourcemaps to LaunchDarkly Observability from the build that
+// produces the DEPLOYED artifacts (Vercel's `vercel-build`). It must run from
+// that build: the maps only match if they correspond to the exact
+// content-hashed files that actually get served. A separate CI build (e.g. the
+// GitHub Actions test workflow) produces different artifacts, so uploading from
+// there would push maps for files no one is served — hence this lives here.
+//
+// Bulletproof by design:
+//   * Downloads a pinned `ldcli` binary straight from GitHub releases. The npm
+//     package `@launchdarkly/ldcli` has `bin: null` (it shells out to go-npm in
+//     a postinstall), so `npx @launchdarkly/ldcli` fails with
+//     "could not determine executable to run". We avoid npx entirely.
+//   * Retries the download and the upload to ride out transient network errors.
+//   * On a real deploy (Vercel production/preview) any failure is FATAL, so a
+//     deploy can never silently ship without sourcemaps. Escape hatches:
+//       - SOURCEMAPS_UPLOAD_OPTIONAL=true  -> downgrade failures to a warning
+//       - SOURCEMAPS_UPLOAD_FORCE=true     -> run the upload outside a deploy
+//         (e.g. a manual/local re-upload for a specific version)
+import { existsSync, readdirSync, statSync, mkdtempSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
+const LDCLI_VERSION = '3.10.0';
+const PROJECT = 'challenger';
+const MAX_ATTEMPTS = 3;
+
 const token = process.env.LD_ACCESS_TOKEN;
-const version = process.env.VERCEL_GIT_COMMIT_SHA;
 const vercelEnv = process.env.VERCEL_ENV;
-const project = 'challenger';
+const force = process.env.SOURCEMAPS_UPLOAD_FORCE === 'true';
+const optional = process.env.SOURCEMAPS_UPLOAD_OPTIONAL === 'true';
+
+function capture(cmd, args) {
+	const r = spawnSync(cmd, args, { encoding: 'utf8' });
+	return r.status === 0 ? r.stdout.trim() : '';
+}
+
+// Deploy version, in priority order: Vercel, GitHub Actions, then local HEAD.
+// MUST equal the `version` baked into the client bundle (see vite.config.ts) so
+// LaunchDarkly can pair ingested errors with these maps.
+const version =
+	process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || capture('git', ['rev-parse', 'HEAD']);
+
+// A real deploy that must not ship without maps.
+const isVercelDeploy = vercelEnv === 'production' || vercelEnv === 'preview';
+// Whether we attempt the upload at all, and whether a failure is fatal.
+const active = isVercelDeploy || force;
+const fatal = active && !optional;
 
 function skip(reason) {
 	console.log(`[sourcemaps] Skipping upload: ${reason}.`);
 	process.exit(0);
 }
 
-// Loud, non-fatal skip for the case that SHOULD upload but can't: a real
-// production/preview deploy missing its token. Uncaught in build logs, this is
-// exactly how a deploy ships with no maps and its errors never de-minify.
-function skipLoud(reason) {
-	console.warn(
-		`[sourcemaps] WARNING — not uploading on a deploy that should have maps: ${reason}. ` +
-			`Stack traces for app-version ${version} will NOT de-minify in LaunchDarkly. ` +
-			`Continuing so the deploy still succeeds.`
-	);
+// Non-fatal contexts warn and exit 0; a real deploy fails the build so it never
+// ships without sourcemaps.
+function stop(reason) {
+	if (fatal) {
+		console.error(
+			`[sourcemaps] ${reason} — failing the build so this deploy does not ship without sourcemaps ` +
+				`(set SOURCEMAPS_UPLOAD_OPTIONAL=true to override).`
+		);
+		process.exit(1);
+	}
+	console.warn(`[sourcemaps] ${reason} — continuing (not a fatal context).`);
 	process.exit(0);
 }
 
-// Ordered so a genuine misconfiguration is loud: first rule out the non-deploy
-// contexts (local build, non-prod/preview env) with quiet skips, so that a
-// missing token past this point can only mean a real deploy lacks it.
-if (!version) skip('VERCEL_GIT_COMMIT_SHA not set (not a Vercel git build)');
-// Upload for production and preview deploys, so preview URLs de-minify too.
-// Requires LD_ACCESS_TOKEN to be present in the Preview env scope on Vercel.
-const uploadEnvs = ['production', 'preview'];
-if (vercelEnv && !uploadEnvs.includes(vercelEnv)) skip(`VERCEL_ENV=${vercelEnv}, not ${uploadEnvs.join('/')}`);
-if (!token) skipLoud('LD_ACCESS_TOKEN not set — add it to this environment scope in Vercel');
+function sleep(seconds) {
+	// Synchronous, dependency-free backoff between retries.
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);
+}
 
+function withRetry(label, attempt) {
+	for (let i = 1; i <= MAX_ATTEMPTS; i++) {
+		if (attempt(i)) return true;
+		if (i < MAX_ATTEMPTS) {
+			console.warn(`[sourcemaps] ${label} attempt ${i}/${MAX_ATTEMPTS} failed; retrying...`);
+			sleep(i * 2);
+		}
+	}
+	return false;
+}
+
+// --- guards -------------------------------------------------------------
+// A non-prod/preview Vercel env (e.g. 'development') never deploys assets.
+if (vercelEnv && !isVercelDeploy && !force) skip(`VERCEL_ENV=${vercelEnv}, not production/preview`);
+if (!active) skip('not a production/preview deploy (set SOURCEMAPS_UPLOAD_FORCE=true to run manually)');
+if (!version) stop('could not determine an app version (no VERCEL_GIT_COMMIT_SHA / GITHUB_SHA / git HEAD)');
+if (!token) stop('LD_ACCESS_TOKEN not set — add it to this environment scope');
+
+// --- locate maps --------------------------------------------------------
 function countMaps(dir) {
 	let total = 0;
 	let entries;
@@ -60,42 +112,73 @@ function countMaps(dir) {
 	return total;
 }
 
-// adapter-vercel writes client assets to .vercel/output/static; Vite always
-// writes the raw client output (with the hidden .map files) to
+// adapter-vercel writes the served client assets (with their hidden .map files)
+// to .vercel/output/static; a plain Vite build writes them to
 // .svelte-kit/output/client. Pick whichever actually contains sourcemaps.
 const candidates = ['.vercel/output/static', '.svelte-kit/output/client'];
-const path = candidates.find((c) => existsSync(c) && countMaps(c) > 0);
-if (!path) skip(`no .map files found in ${candidates.join(' or ')}`);
+const mapsPath = candidates.find((c) => existsSync(c) && countMaps(c) > 0);
+if (!mapsPath) stop(`no .map files found in ${candidates.join(' or ')}`);
 
-console.log(
-	`[sourcemaps] Uploading ${countMaps(path)} map(s) from ${path} for app-version ${version} ...`
-);
-const result = spawnSync(
-	'npx',
-	[
-		'-y',
-		'@launchdarkly/ldcli@3.10.0',
-		'--access-token',
-		token,
-		'sourcemaps',
-		'upload',
-		'--project',
-		project,
-		'--app-version',
-		version,
-		'--path',
-		path
-	],
-	{ encoding: 'utf8' }
-);
-
-if (result.stdout) console.log(result.stdout.trim());
-if (result.stderr) console.log(result.stderr.trim());
-
-if (result.status !== 0) {
-	console.warn(
-		`[sourcemaps] Upload failed (exit ${result.status ?? 'null'}); continuing so the deploy still succeeds.`
-	);
-	process.exit(0);
+// --- fetch the pinned ldcli binary --------------------------------------
+function ldcliAsset() {
+	const osName = { linux: 'linux', darwin: 'darwin', win32: 'windows' }[process.platform];
+	const arch = { x64: 'amd64', arm64: 'arm64', ia32: '386' }[process.arch];
+	if (!osName || !arch) stop(`unsupported platform ${process.platform}/${process.arch} for ldcli`);
+	return `ldcli_${LDCLI_VERSION}_${osName}_${arch}.tar.gz`;
 }
+
+const workdir = mkdtempSync(join(tmpdir(), 'ldcli-'));
+const asset = ldcliAsset();
+const url = `https://github.com/launchdarkly/ldcli/releases/download/v${LDCLI_VERSION}/${asset}`;
+const tarball = join(workdir, asset);
+const ldcli = join(workdir, process.platform === 'win32' ? 'ldcli.exe' : 'ldcli');
+
+console.log(`[sourcemaps] Fetching ldcli ${LDCLI_VERSION} (${asset}) ...`);
+const downloaded = withRetry('download', () => {
+	const dl = spawnSync(
+		'curl',
+		['-fsSL', '--retry', '3', '--retry-delay', '2', '-o', tarball, url],
+		{ encoding: 'utf8' }
+	);
+	if (dl.status !== 0) {
+		if (dl.stderr) console.warn(dl.stderr.trim());
+		return false;
+	}
+	const ex = spawnSync('tar', ['-xzf', tarball, '-C', workdir], { encoding: 'utf8' });
+	if (ex.status !== 0) {
+		if (ex.stderr) console.warn(ex.stderr.trim());
+		return false;
+	}
+	return existsSync(ldcli);
+});
+if (!downloaded) stop(`failed to download/extract ldcli from ${url}`);
+chmodSync(ldcli, 0o755);
+
+// --- upload -------------------------------------------------------------
+console.log(
+	`[sourcemaps] Uploading ${countMaps(mapsPath)} map(s) from ${mapsPath} for app-version ${version} ...`
+);
+const uploaded = withRetry('upload', () => {
+	const r = spawnSync(
+		ldcli,
+		[
+			'--access-token',
+			token,
+			'sourcemaps',
+			'upload',
+			'--project',
+			PROJECT,
+			'--app-version',
+			version,
+			'--path',
+			mapsPath
+		],
+		{ encoding: 'utf8' }
+	);
+	if (r.stdout) console.log(r.stdout.trim());
+	if (r.stderr) console.log(r.stderr.trim());
+	return r.status === 0;
+});
+if (!uploaded) stop(`upload failed after ${MAX_ATTEMPTS} attempts`);
+
 console.log('[sourcemaps] Upload complete.');
