@@ -1,11 +1,12 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { and, count, eq, isNotNull, or } from 'drizzle-orm';
 import postgres from 'postgres';
 import { faker } from '@faker-js/faker';
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
 import * as schema from './schema';
-import { team, match, tournament, tournamentAttendee } from './schema';
+import { team, match, tournament, tournamentAttendee, userProfile } from './schema';
 import {
 	STATIC_USER,
 	TEST_USER,
@@ -136,7 +137,7 @@ async function seedUsers() {
 	}
 
 	console.log(`Users: ${created} created, ${skipped} already existed.`);
-	return { staticUserId: staticUser.id, userIds };
+	return { staticUserId: staticUser.id, testUserId: testUser.id, userIds };
 }
 
 async function seedTournaments(staticUserId: string) {
@@ -184,15 +185,20 @@ async function seedMatches(
 	staticUserId: string,
 	userIds: string[],
 	teams: Array<{ id: number; name: string }>,
-	tournaments: Array<{ id: number }>
+	tournaments: Array<{ id: number }>,
+	casualOnlyIds: Set<string>
 ) {
 	// Regenerated every run so per-user match counts always match the current
 	// targets below, rather than accumulating from whatever a prior run left.
 	await db.delete(match);
 
 	// ~40% of matches are tied to a tournament; the rest are casual (null).
+	// Any match involving a "casual-only" account (Max, test1) is forced casual
+	// so those users have zero tournament matches — hasPlayedTournament stays
+	// false for them, giving the LD segment a real split to target.
 	const tournamentIds = tournaments.map((t) => t.id);
-	function randomTournamentId(): number | null {
+	function pickTournamentId(player1Id: string, player2Id: string): number | null {
+		if (casualOnlyIds.has(player1Id) || casualOnlyIds.has(player2Id)) return null;
 		return Math.random() < 0.4 ? randomItem(tournamentIds) : null;
 	}
 
@@ -218,7 +224,7 @@ async function seedMatches(
 				player2Id,
 				player1TeamId: player1Team.id,
 				player2TeamId: player2Team.id,
-				tournamentId: randomTournamentId(),
+				tournamentId: pickTournamentId(player1Id, player2Id),
 				player1Crit: p1.crit,
 				player1Tac: p1.tac,
 				player1Kill: p1.kill,
@@ -236,12 +242,45 @@ async function seedMatches(
 	console.log(`Matches: ${rows.length} inserted (Max: ${STATIC_USER_MATCH_COUNT}, others: ${RANDOM_MATCH_COUNT_RANGE[0]}-${RANDOM_MATCH_COUNT_RANGE[1]} each, as their own logged games).`);
 }
 
+// Precompute LaunchDarkly attributes for every user from the match table.
+// hasPlayedTournament is true only when the user has at least one match tied to
+// a tournament; totalMatches counts every match they appear in. Idempotent.
+async function seedUserProfiles() {
+	const allUsers = await db.select().from(schema.user);
+	for (const u of allUsers) {
+		const isPlayer = or(eq(match.player1Id, u.id), eq(match.player2Id, u.id));
+		const [{ total }] = await db.select({ total: count() }).from(match).where(isPlayer);
+		const [{ tournamentTotal }] = await db
+			.select({ tournamentTotal: count() })
+			.from(match)
+			.where(and(isNotNull(match.tournamentId), isPlayer));
+		await db
+			.insert(userProfile)
+			.values({
+				userId: u.id,
+				hasPlayedTournament: tournamentTotal > 0,
+				totalMatches: total
+			})
+			.onConflictDoUpdate({
+				target: userProfile.userId,
+				set: {
+					hasPlayedTournament: tournamentTotal > 0,
+					totalMatches: total,
+					updatedAt: new Date()
+				}
+			});
+	}
+	console.log(`User profiles: ${allUsers.length} upserted.`);
+}
+
 async function main() {
 	const teams = await seedTeams();
-	const { staticUserId, userIds } = await seedUsers();
+	const { staticUserId, testUserId, userIds } = await seedUsers();
 	const tournaments = await seedTournaments(staticUserId);
 	await seedAttendees(staticUserId, userIds, tournaments);
-	await seedMatches(staticUserId, userIds, teams, tournaments);
+	// Max and test1 are kept tournament-free so hasPlayedTournament is false for them.
+	await seedMatches(staticUserId, userIds, teams, tournaments, new Set([staticUserId, testUserId]));
+	await seedUserProfiles();
 
 	console.log('\nSeed complete.');
 	console.log(`Static login -> email: ${STATIC_USER.email}, password: ${SEED_PASSWORD}`);

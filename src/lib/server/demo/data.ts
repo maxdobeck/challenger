@@ -257,6 +257,8 @@ export function getDemoStatsRows(userId: string) {
 			player1Id: m.player1Id,
 			player1TeamName: teamName(m.player1TeamId),
 			player2TeamName: teamName(m.player2TeamId),
+			tournamentId: m.tournamentId,
+			tournamentName: tournamentName(m.tournamentId),
 			player1Crit: m.player1Crit,
 			player1Tac: m.player1Tac,
 			player1Kill: m.player1Kill,

@@ -1,10 +1,10 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { desc, eq, ne, or } from 'drizzle-orm';
+import { desc, eq, ne, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Actions, PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { match, team, tournament, user } from '$lib/server/db/schema';
+import { match, team, tournament, user, userProfile } from '$lib/server/db/schema';
 import {
 	addDemoMatch,
 	getDemoOpponents,
@@ -152,6 +152,26 @@ export const actions: Actions = {
 			addDemoMatch(values);
 		} else {
 			await db.insert(match).values(values);
+			// Keep the precomputed LD attributes in sync with the match table.
+			// Only a tournament match sets the flag; a casual match still bumps
+			// totalMatches for both players.
+			const playedTournament = values.tournamentId != null;
+			await db
+				.insert(userProfile)
+				.values([
+					{ userId: values.player1Id, hasPlayedTournament: playedTournament, totalMatches: 1 },
+					{ userId: values.player2Id, hasPlayedTournament: playedTournament, totalMatches: 1 }
+				])
+				.onConflictDoUpdate({
+					target: userProfile.userId,
+					set: {
+						// Monotonic OR: once true, stays true — a later casual match
+						// never downgrades a veteran back to false.
+						hasPlayedTournament: sql`${userProfile.hasPlayedTournament} OR ${playedTournament}`,
+						totalMatches: sql`${userProfile.totalMatches} + 1`,
+						updatedAt: sql`now()`
+					}
+				});
 		}
 
 		return { success: true };

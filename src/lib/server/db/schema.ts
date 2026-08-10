@@ -1,4 +1,13 @@
-import { pgTable, serial, integer, text, timestamp, date, primaryKey } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	serial,
+	integer,
+	text,
+	timestamp,
+	date,
+	boolean,
+	primaryKey
+} from 'drizzle-orm/pg-core';
 import { user } from './auth.schema';
 
 export const task = pgTable('task', {
@@ -65,6 +74,15 @@ export const match = pgTable('match', {
 	player2Primary: integer('player2_primary').notNull().default(0),
 	playedAt: timestamp('played_at', { withTimezone: true }).notNull().defaultNow(),
 	notes: text('notes')
+});
+
+export const userProfile = pgTable('user_profile', {
+	userId: text('user_id')
+		.primaryKey()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	hasPlayedTournament: boolean('has_played_tournament').notNull().default(false),
+	totalMatches: integer('total_matches').notNull().default(0),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 
 export * from './auth.schema';
