@@ -1,15 +1,34 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { fail, redirect, type RequestEvent } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
+import { env } from '$env/dynamic/private';
 import { DEMO_LOGIN_ACCOUNTS, DEMO_LOGIN_PASSWORD } from '$lib/server/db/demo-fixtures';
+import { demoAuthUsersByEmail } from '$lib/server/demo/data';
+import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
+
+const DEMO_MODE = env.DEMO_MODE === 'true';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		return redirect(302, '/leaderboard');
 	}
-	return { demoAccounts: DEMO_LOGIN_ACCOUNTS };
+	return { demoAccounts: DEMO_LOGIN_ACCOUNTS, demoMode: DEMO_MODE };
 };
+
+// Demo mode's stand-in for a password check: any of the curated demo emails
+// (case-insensitive, matching better-auth's own normalization) logs in as
+// that account directly, since there's no database to verify a password
+// against. Returns null when the email isn't a known demo account.
+function signInDemoUser(event: RequestEvent, email: string) {
+	const user = demoAuthUsersByEmail.get(email.toLowerCase());
+	if (!user) return null;
+	event.cookies.set(DEMO_SESSION_COOKIE, user.id, {
+		path: '/',
+		httpOnly: true,
+		sameSite: 'lax'
+	});
+	return user;
+}
 
 export const actions: Actions = {
 	signInEmail: async (event) => {
@@ -17,6 +36,14 @@ export const actions: Actions = {
 		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
 
+		if (DEMO_MODE) {
+			if (!signInDemoUser(event, email)) {
+				return fail(400, { message: 'Unknown demo account — pick one from the list below.' });
+			}
+			return redirect(302, '/leaderboard');
+		}
+
+		const { auth } = await import('$lib/server/auth');
 		try {
 			await auth.api.signInEmail({
 				body: { email, password }
@@ -41,6 +68,14 @@ export const actions: Actions = {
 			return fail(400, { message: 'Unknown demo account' });
 		}
 
+		if (DEMO_MODE) {
+			if (!signInDemoUser(event, account.email)) {
+				return fail(400, { message: 'Unknown demo account' });
+			}
+			return redirect(302, '/leaderboard');
+		}
+
+		const { auth } = await import('$lib/server/auth');
 		try {
 			await auth.api.signInEmail({
 				body: { email: account.email, password: DEMO_LOGIN_PASSWORD }
@@ -55,11 +90,18 @@ export const actions: Actions = {
 		return redirect(302, '/leaderboard');
 	},
 	signUpEmail: async (event) => {
+		if (DEMO_MODE) {
+			return fail(400, {
+				message: 'Registration is not available in demo mode — pick one of the demo accounts below.'
+			});
+		}
+
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
 		const name = formData.get('name')?.toString() ?? '';
 
+		const { auth } = await import('$lib/server/auth');
 		try {
 			await auth.api.signUpEmail({
 				body: { email, password, name }

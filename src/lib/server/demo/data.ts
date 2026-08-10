@@ -1,7 +1,10 @@
 import {
 	STATIC_USER,
+	TEST_USER,
+	TOURNEY_USER,
 	teamNames,
 	FAKE_PLAYERS,
+	killteamEmail,
 	STATIC_USER_MATCH_COUNT,
 	RANDOM_MATCH_COUNT_RANGE,
 	DEMO_TOURNAMENT_COUNT,
@@ -64,28 +67,47 @@ function mulberry32(seed: number): Rng {
 const rng = mulberry32(20260806);
 
 const MAX_ID = 'demo-max';
+const TEST1_ID = 'demo-test1';
+const TOURNEY_ID = 'demo-tourney';
 
 export const DEMO_MODE: boolean = true;
 export const demoTeams: DemoTeam[] = teamNames.map((name, index) => ({ id: index + 1, name }));
 
+// Mirrors DEMO_LOGIN_ACCOUNTS' fixed accounts (Max, test1, testTourney) so the
+// same 15 curated login accounts resolve to real identities — with generated
+// match/tournament history — in demo mode, not just in the seeded DB.
 export const demoUsers: DemoUser[] = [
 	{ id: MAX_ID, name: STATIC_USER.name, email: STATIC_USER.email },
+	{ id: TEST1_ID, name: TEST_USER.name, email: TEST_USER.email },
+	{ id: TOURNEY_ID, name: TOURNEY_USER.name, email: TOURNEY_USER.email },
 	...FAKE_PLAYERS.map((name, index) => ({
 		id: `demo-player-${index + 1}`,
 		name,
-		email: `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`
+		email: killteamEmail(name)
 	}))
 ];
 
-export const DEMO_USER = {
-	id: MAX_ID,
-	name: STATIC_USER.name,
-	email: STATIC_USER.email,
-	emailVerified: true,
-	image: null,
-	createdAt: new Date('2026-01-01T00:00:00Z'),
-	updatedAt: new Date('2026-01-01T00:00:00Z')
-};
+// Full `User`-shaped record (the auth session shape) for a demo account, built
+// on demand rather than stored per-user since it's only needed once a login
+// resolves who signed in.
+function toDemoAuthUser(u: DemoUser) {
+	return {
+		id: u.id,
+		name: u.name,
+		email: u.email,
+		emailVerified: true,
+		image: null,
+		createdAt: new Date('2026-01-01T00:00:00Z'),
+		updatedAt: new Date('2026-01-01T00:00:00Z')
+	};
+}
+
+// Looked up by the demo session cookie (id) and by /login's sign-in actions
+// (email, case-insensitive to match better-auth's own normalization).
+export const demoAuthUsersById = new Map(demoUsers.map((u) => [u.id, toDemoAuthUser(u)]));
+export const demoAuthUsersByEmail = new Map(
+	demoUsers.map((u) => [u.email.toLowerCase(), toDemoAuthUser(u)])
+);
 
 // Reproducible in-memory tournaments, composed from the shared fixture arrays via
 // the seeded rng (the real seed uses faker instead — see seed.ts).

@@ -57,13 +57,15 @@
 	</label>
 	<div style="display:flex; gap:0.75rem; flex-wrap: wrap;">
 		<button type="submit">Login</button>
-		<button
-			type="submit"
-			formaction="?/signUpEmail"
-			class="button"
-			style="background:transparent; color:var(--color-text); border-color:var(--color-border);"
-			>Register</button
-		>
+		{#if !data.demoMode}
+			<button
+				type="submit"
+				formaction="?/signUpEmail"
+				class="button"
+				style="background:transparent; color:var(--color-text); border-color:var(--color-border);"
+				>Register</button
+			>
+		{/if}
 		{#if selectedAccount}
 			<button
 				type="submit"
@@ -106,7 +108,11 @@
 	<p class="error">{form.message}</p>
 {/if}
 
-<p class="muted">Seeded demo accounts use the password <code>password123</code>.</p>
+{#if data.demoMode}
+	<p class="muted">Demo mode — enter any demo account's email above, or pick one below (no password needed).</p>
+{:else}
+	<p class="muted">Seeded demo accounts use the password <code>password123</code>.</p>
+{/if}
 
 <style>
 	.login-as {
