@@ -5,10 +5,18 @@
 
 	let { data }: { data: PageServerData } = $props();
 
-	// Intentionally throws so the unfinished feature surfaces a real error
-	// (captured by LaunchDarkly Observability / Session Replay).
-	function matchmake() {
-		throw new Error("OOPS this feature isn't working :(");
+	// Reports the unfinished feature to LaunchDarkly Observability with an
+	// explicit message and component context, rather than throwing an uncaught
+	// error. LDObserve lives in the observability chunk that initLD() already
+	// loaded, so this dynamic import resolves from cache and stays out of the
+	// page's initial bundle. Add `throw error` after if you also want the UI
+	// to visibly break.
+	async function matchmake() {
+		const error = new Error("OOPS this feature isn't working :(");
+		const { LDObserve } = await import('@launchdarkly/observability');
+		LDObserve.recordError(error, 'Matchmake Now is not implemented yet', {
+			component: 'leaderboard/+page.svelte'
+		});
 	}
 
 	type Entry = (typeof data.leaderboard)[number];

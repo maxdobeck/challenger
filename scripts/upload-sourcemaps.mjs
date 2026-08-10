@@ -18,8 +18,10 @@ function skip(reason) {
 
 if (!token) skip('LD_ACCESS_TOKEN not set');
 if (!version) skip('VERCEL_GIT_COMMIT_SHA not set (not a Vercel git build)');
-// Upload only for production deploys; flip/remove this to include previews.
-if (vercelEnv && vercelEnv !== 'production') skip(`VERCEL_ENV=${vercelEnv}, not production`);
+// Upload for production and preview deploys, so preview URLs de-minify too.
+// Requires LD_ACCESS_TOKEN to be present in the Preview env scope on Vercel.
+const uploadEnvs = ['production', 'preview'];
+if (vercelEnv && !uploadEnvs.includes(vercelEnv)) skip(`VERCEL_ENV=${vercelEnv}, not ${uploadEnvs.join('/')}`);
 
 function countMaps(dir) {
 	let total = 0;
