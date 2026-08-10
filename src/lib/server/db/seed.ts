@@ -8,10 +8,12 @@ import * as schema from './schema';
 import { team, match, tournament, tournamentAttendee } from './schema';
 import {
 	STATIC_USER,
+	TEST_USER,
 	teamNames,
 	FAKE_PLAYERS,
 	STATIC_USER_MATCH_COUNT,
 	RANDOM_MATCH_COUNT_RANGE,
+	killteamEmail,
 	randomItem,
 	randomInt,
 	randomPastDate,
@@ -120,8 +122,13 @@ async function seedUsers() {
 	if (staticUser.created) created++;
 	else skipped++;
 
+	const testUser = await seedUser(TEST_USER.name, TEST_USER.email);
+	userIds.push(testUser.id);
+	if (testUser.created) created++;
+	else skipped++;
+
 	for (const name of FAKE_PLAYERS) {
-		const email = `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`;
+		const email = killteamEmail(name);
 		const user = await seedUser(name, email);
 		userIds.push(user.id);
 		if (user.created) created++;
