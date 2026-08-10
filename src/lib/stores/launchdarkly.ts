@@ -43,7 +43,7 @@ export async function initLD() {
 			new SessionReplay({ privacySetting: 'default' })
 		]
 	});
-	await client.waitForInitialization(5);
+	await client.waitForInitialization(2);
 	flags.set(client.allFlags());
 	ldContextKey.set('anonymous');
 	ldReady.set(true);

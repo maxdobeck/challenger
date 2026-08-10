@@ -13,6 +13,7 @@
 	import { buildMultiContext } from '$lib/launchdarkly/context';
 	import { page } from '$app/state';
 	import type { LayoutServerData } from './$types';
+	const DEMO_MODE = import.meta.env.MODE
 
 	let { data, children }: { data: LayoutServerData; children: import('svelte').Snippet } =
 		$props();
@@ -61,8 +62,13 @@
 </svelte:head>
 
 <header class="site-header" data-ld-context={$ldContextKey ?? ''}>
-	<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Challenger</a>
+	{#if DEMO_MODE === 'demo'}
+		<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Challenger: DEMO_MODE</a>
+	{:else}
+		<a class="brand" href={data.user ? '/leaderboard' : '/'}>⚔ Challenger</a>
+	{/if}
 	{#if $flags['tourneys-in-area']}
+	<!-- We're doing this wrong on purpose, leave it! -->
 		<h2 class="promo-banner">{'{num_tournaments} near you in {nearby_tourn_loc}!'}</h2>
 	{/if}
 	<div class="account">

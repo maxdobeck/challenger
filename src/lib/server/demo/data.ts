@@ -65,6 +65,7 @@ const rng = mulberry32(20260806);
 
 const MAX_ID = 'demo-max';
 
+export const DEMO_MODE: boolean = true;
 export const demoTeams: DemoTeam[] = teamNames.map((name, index) => ({ id: index + 1, name }));
 
 export const demoUsers: DemoUser[] = [
