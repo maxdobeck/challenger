@@ -1,6 +1,9 @@
 import { writable } from 'svelte/store';
 import { initialize, type LDClient, type LDFlagChangeset } from 'launchdarkly-js-client-sdk';
-import { PUBLIC_LD_CLIENT_ID } from '$env/static/public';
+// Dynamic (not static) so the build never fails when PUBLIC_LD_CLIENT_ID is
+// absent — e.g. CI/e2e builds without the env var. It's read at runtime and
+// simply undefined when unset, which initLD() guards against below.
+import { env } from '$env/dynamic/public';
 import { buildAnonymousContext } from '$lib/launchdarkly/context';
 
 let client: LDClient | null = null;
@@ -17,8 +20,9 @@ export const ldReady = writable(false);
  * so local dev without LaunchDarkly still runs.
  */
 export async function initLD() {
-	if (!PUBLIC_LD_CLIENT_ID || client) return;
-	client = initialize(PUBLIC_LD_CLIENT_ID, buildAnonymousContext(), { streaming: true });
+	const clientId = env.PUBLIC_LD_CLIENT_ID;
+	if (!clientId || client) return;
+	client = initialize(clientId, buildAnonymousContext(), { streaming: true });
 	await client.waitForInitialization(5);
 	flags.set(client.allFlags());
 	ldReady.set(true);
