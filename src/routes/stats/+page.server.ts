@@ -4,7 +4,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import type { PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
-import { match, team, user } from '$lib/server/db/schema';
+import { match, team, tournament, user } from '$lib/server/db/schema';
 import { getDemoStatsRows, getDemoUserName } from '$lib/server/demo/data';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
@@ -49,6 +49,8 @@ export const load: PageServerLoad = async (event) => {
 					player1Id: match.player1Id,
 					player1TeamName: player1Team.name,
 					player2TeamName: player2Team.name,
+					tournamentId: match.tournamentId,
+					tournamentName: tournament.name,
 					player1Crit: match.player1Crit,
 					player1Tac: match.player1Tac,
 					player1Kill: match.player1Kill,
@@ -61,11 +63,26 @@ export const load: PageServerLoad = async (event) => {
 				.from(match)
 				.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
 				.innerJoin(player2Team, eq(match.player2TeamId, player2Team.id))
+				.leftJoin(tournament, eq(match.tournamentId, tournament.id))
 				.where(or(eq(match.player1Id, targetUserId), eq(match.player2Id, targetUserId)));
 
 	const byTeam = new Map<
 		string,
 		{ teamName: string; games: number; wins: number; losses: number; draws: number }
+	>();
+
+	// Keyed by tournament id (names can repeat across events); the name is kept
+	// for display. Only matches tied to a tournament contribute here.
+	const byTournament = new Map<
+		number,
+		{
+			tournamentId: number;
+			tournamentName: string;
+			games: number;
+			wins: number;
+			losses: number;
+			draws: number;
+		}
 	>();
 
 	let totalWins = 0;
@@ -99,9 +116,29 @@ export const load: PageServerLoad = async (event) => {
 		else if (result === 'loss') entry.losses++;
 		else entry.draws++;
 		byTeam.set(yourTeam, entry);
+
+		if (row.tournamentId != null && row.tournamentName != null) {
+			const tEntry = byTournament.get(row.tournamentId) ?? {
+				tournamentId: row.tournamentId,
+				tournamentName: row.tournamentName,
+				games: 0,
+				wins: 0,
+				losses: 0,
+				draws: 0
+			};
+			tEntry.games++;
+			if (result === 'win') tEntry.wins++;
+			else if (result === 'loss') tEntry.losses++;
+			else tEntry.draws++;
+			byTournament.set(row.tournamentId, tEntry);
+		}
 	}
 
 	const teamStats = [...byTeam.values()]
+		.map((t) => ({ ...t, winRate: t.games ? t.wins / t.games : 0 }))
+		.sort((a, b) => b.games - a.games);
+
+	const tournamentStats = [...byTournament.values()]
 		.map((t) => ({ ...t, winRate: t.games ? t.wins / t.games : 0 }))
 		.sort((a, b) => b.games - a.games);
 
@@ -110,6 +147,7 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		teamStats,
+		tournamentStats,
 		summary: {
 			totalGames,
 			totalWins,

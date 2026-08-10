@@ -2,10 +2,38 @@
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
+	import { initLD, identifyUser, resetToAnonymous } from '$lib/stores/launchdarkly';
+	import { buildMultiContext } from '$lib/launchdarkly/context';
 	import type { LayoutServerData } from './$types';
 
 	let { data, children }: { data: LayoutServerData; children: import('svelte').Snippet } =
 		$props();
+
+	// Track which user we've already identified to LaunchDarkly so the effect
+	// below only re-identifies on an actual login/logout, not on every data change.
+	// Intentionally a plain (non-reactive) let: it's a dedupe marker across effect
+	// runs, not UI state, so writing it must not re-trigger the effect.
+	let identifiedKey: string | null = null;
+
+	onMount(() => {
+		initLD();
+	});
+
+	$effect(() => {
+		if (data.user && identifiedKey !== data.user.id) {
+			identifiedKey = data.user.id;
+			identifyUser(
+				buildMultiContext(
+					{ id: data.user.id, name: data.user.name, email: data.user.email },
+					data.profile
+				)
+			);
+		} else if (!data.user && identifiedKey !== null) {
+			identifiedKey = null;
+			resetToAnonymous();
+		}
+	});
 </script>
 
 <svelte:head>
