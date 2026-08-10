@@ -1,6 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
+import { teamNames } from './teams';
 
 // Shared between the real seed script (src/lib/server/db/seed.ts, writes to
 // Postgres with true randomness) and the in-memory demo dataset
@@ -26,11 +24,7 @@ export function killteamEmail(name: string): string {
 	return `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`;
 }
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const teamNames = readFileSync(path.resolve(__dirname, '../../../../teams.txt'), 'utf-8')
-	.split('\n')
-	.map((line) => line.trim())
-	.filter(Boolean);
+export { teamNames };
 
 export const FAKE_PLAYERS = [
 	'Kaelen Voss',
