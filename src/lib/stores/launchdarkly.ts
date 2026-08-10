@@ -1,5 +1,7 @@
 import { writable } from 'svelte/store';
 import { initialize, type LDClient, type LDFlagChangeset } from 'launchdarkly-js-client-sdk';
+import Observability from '@launchdarkly/observability';
+import SessionReplay from '@launchdarkly/session-replay';
 // Dynamic (not static) so the build never fails when PUBLIC_LD_CLIENT_ID is
 // absent — e.g. CI/e2e builds without the env var. It's read at runtime and
 // simply undefined when unset, which initLD() guards against below.
@@ -29,7 +31,18 @@ export const ldContextKey = writable<string | null>(null);
 export async function initLD() {
 	const clientId = env.PUBLIC_LD_CLIENT_ID;
 	if (!clientId || client) return;
-	client = initialize(clientId, buildAnonymousContext(), { streaming: true });
+	client = initialize(clientId, buildAnonymousContext(), {
+		streaming: true,
+		// Auto-captures frontend errors, console logs, web vitals, network
+		// requests, and traces linking browser fetches to same-origin backend
+		// routes. Rides the same anonymous → identified context lifecycle below.
+		// SessionReplay records user sessions for playback in LaunchDarkly;
+		// 'default' privacy masks inputs while keeping the replay useful.
+		plugins: [
+			new Observability({ tracingOrigins: true }),
+			new SessionReplay({ privacySetting: 'default' })
+		]
+	});
 	await client.waitForInitialization(5);
 	flags.set(client.allFlags());
 	ldContextKey.set('anonymous');

@@ -11,10 +11,23 @@
 		ldContextKey
 	} from '$lib/stores/launchdarkly';
 	import { buildMultiContext } from '$lib/launchdarkly/context';
+	import { page } from '$app/state';
 	import type { LayoutServerData } from './$types';
 
 	let { data, children }: { data: LayoutServerData; children: import('svelte').Snippet } =
 		$props();
+
+	const navLinks = [
+		{ href: '/matches', label: 'Log Match' },
+		{ href: '/stats', label: 'My Stats' },
+		{ href: '/leaderboard', label: 'Leaderboard' },
+		{ href: '/tournaments', label: 'Tournaments' }
+	];
+
+	// Highlight the nav item for the section we're in, including nested routes
+	// (e.g. /tournaments/new keeps Tournaments active).
+	const isActive = (href: string) =>
+		page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
 
 	// Track which user we've already identified to LaunchDarkly so the effect
 	// below only re-identifies on an actual login/logout, not on every data change.
@@ -71,26 +84,14 @@
 
 {#if data.user}
 	<nav class="site-subnav">
-		<a
-			href="/matches"
-			class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
-			>Log Match</a
-		>
-		<a
-			href="/stats"
-			class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
-			>My Stats</a
-		>
-		<a
-			href="/leaderboard"
-			class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
-			>Leaderboard</a
-		>
-		<a
-			href="/tournaments"
-			class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
-			>Tournaments</a
-		>
+		{#each navLinks as link (link.href)}
+			<a
+				href={link.href}
+				class="border-b border-b-transparent hover:border-b-[var(--color-masthead)]"
+				class:active={isActive(link.href)}
+				aria-current={isActive(link.href) ? 'page' : undefined}>{link.label}</a
+			>
+		{/each}
 	</nav>
 {/if}
 

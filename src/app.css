@@ -141,6 +141,13 @@ h1 {
 	color: var(--color-accent);
 }
 
+/* Current section: solid orange background so the active tab stands out. */
+.site-subnav a.active,
+.site-subnav a.active:hover {
+	background: var(--color-masthead);
+	color: #ffffff;
+}
+
 main {
 	max-width: 960px;
 	margin: 0 auto;
