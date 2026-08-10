@@ -12,6 +12,9 @@
 	// first curated account (Max).
 	let selectedEmail = $state('');
 	let demoOpen = $state(false);
+	// Drives the purple flash on the "Login as …" button. Starts false so the
+	// button does not animate on initial page load.
+	let flashing = $state(false);
 
 	const selectedAccount = $derived(
 		data.demoAccounts.find((a) => a.email === selectedEmail) ?? data.demoAccounts[0]
@@ -21,6 +24,12 @@
 	function selectAccount(accountEmail: string) {
 		selectedEmail = accountEmail;
 		demoOpen = false;
+		// Restart the flash: drop the class, then re-add it on the next frame so
+		// the browser replays the animation even when re-selecting the same account.
+		flashing = false;
+		requestAnimationFrame(() => {
+			flashing = true;
+		});
 	}
 </script>
 
@@ -62,7 +71,9 @@
 				formnovalidate
 				name="loginAsEmail"
 				value={selectedAccount.email}
-				class="button"
+				class="button login-as"
+				class:flash={flashing}
+				onanimationend={() => (flashing = false)}
 				style="background:transparent; color:var(--color-text); border-color:var(--color-border);"
 				>Login as {firstName(selectedAccount.name)}</button
 			>
@@ -98,6 +109,38 @@
 <p class="muted">Seeded demo accounts use the password <code>password123</code>.</p>
 
 <style>
+	.login-as {
+		--color-flash: #7c3aed;
+	}
+
+	.login-as.flash {
+		animation: flash-purple 600ms ease-out;
+	}
+
+	@keyframes flash-purple {
+		0% {
+			background: var(--color-flash);
+			border-color: var(--color-flash);
+			color: #fff;
+		}
+		35% {
+			background: var(--color-flash);
+			border-color: var(--color-flash);
+			color: #fff;
+		}
+		100% {
+			background: transparent;
+			border-color: var(--color-border);
+			color: var(--color-text);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.login-as.flash {
+			animation: none;
+		}
+	}
+
 	.demo-accounts {
 		border: 1px solid var(--color-border);
 		border-radius: 2px;
