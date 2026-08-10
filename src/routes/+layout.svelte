@@ -81,14 +81,12 @@
 	{/if}
 	<div class="account">
 		{#if data.user}
+			<form method="post" action="/logout" use:enhance>
+				<button type="submit">Sign out</button>
+			</form>
+			<span>{data.user.name}</span>
 			{#if data.demoMode}
-				<span>{data.user.name}</span>
 				<span class="demo-badge">Demo Mode</span>
-			{:else}
-				<form method="post" action="/logout" use:enhance>
-					<button type="submit">Sign out</button>
-				</form>
-				<span>{data.user.name}</span>
 			{/if}
 		{:else}
 			<a href="/login">Login</a>

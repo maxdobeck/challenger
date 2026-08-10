@@ -1,10 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 test('the demo-account dropdown selects who the "Login as" button signs in', async ({ page }) => {
-	// Demo mode auto-authenticates as Max (no login form, no Sign out button —
-	// a "DEMO MODE" badge replaces it), so this real-auth flow doesn't apply.
-	test.skip(process.env.DEMO_MODE === 'true', 'real-auth login flow: N/A in demo mode');
-
+	// Works in both modes: /login always renders the form and dropdown, and
+	// picking an account signs in for real (better-auth in DB mode, a demo
+	// session cookie in demo mode) rather than a hardcoded auto-login.
 	await page.goto('/login');
 
 	// Defaults to the first curated account (Max).
