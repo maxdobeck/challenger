@@ -13,7 +13,12 @@ export type Rng = () => number;
 export const STATIC_USER = { name: 'Max', email: 'max@killteam.example' };
 
 // Extra fixed account for manual testing, alongside the STATIC_USER.
-export const TEST_USER = { name: 'test1', email: 'test1@killteam.example' };
+export const TEST_USER = { name: 'test1', email: 'test1@challenger.example.com' };
+
+// Fixed account that is forced to have a tournament match history, so its
+// `hasPlayedTournament` LD attribute is always true (the inverse of the
+// casual-only accounts above). Used by the banner e2e tests.
+export const TOURNEY_USER = { name: 'testTourney', email: 'testTourney@challenger.example.com' };
 
 // Derives a seeded player's email from their display name. Shared with the seed
 // script so the login dropdown's addresses can never drift from what's seeded.
@@ -89,6 +94,7 @@ export const DEMO_LOGIN_PASSWORD = 'password123';
 export const DEMO_LOGIN_ACCOUNTS: ReadonlyArray<{ name: string; email: string }> = [
 	{ name: STATIC_USER.name, email: STATIC_USER.email },
 	{ name: TEST_USER.name, email: TEST_USER.email },
+	{ name: TOURNEY_USER.name, email: TOURNEY_USER.email },
 	...FAKE_PLAYERS.slice(0, 3).map((name) => ({ name, email: killteamEmail(name) }))
 ];
 

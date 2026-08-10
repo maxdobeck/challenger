@@ -15,6 +15,13 @@ export const flags = writable<Record<string, unknown>>({});
 export const ldReady = writable(false);
 
 /**
+ * The context key whose flags are currently loaded in the `flags` store:
+ * `'anonymous'` before login, the user's id after `identifyUser` resolves.
+ * Lets callers (and e2e tests) know flag values reflect the identified user
+ * rather than the anonymous context. */
+export const ldContextKey = writable<string | null>(null);
+
+/**
  * Initialize the LD client once, anonymously. Safe to call more than once
  * (subsequent calls are no-ops) and a no-op when no client id is configured,
  * so local dev without LaunchDarkly still runs.
@@ -25,6 +32,7 @@ export async function initLD() {
 	client = initialize(clientId, buildAnonymousContext(), { streaming: true });
 	await client.waitForInitialization(5);
 	flags.set(client.allFlags());
+	ldContextKey.set('anonymous');
 	ldReady.set(true);
 	client.on('change', (changes: LDFlagChangeset) => {
 		flags.update((current) => {
@@ -42,6 +50,8 @@ export async function identifyUser(context: object) {
 	if (!client) return;
 	await client.identify(context);
 	flags.set(client.allFlags());
+	const key = (context as { user?: { key?: string } }).user?.key ?? null;
+	ldContextKey.set(key);
 }
 
 /** Revert to the anonymous context after logout. */
@@ -49,4 +59,5 @@ export async function resetToAnonymous() {
 	if (!client) return;
 	await client.identify(buildAnonymousContext());
 	flags.set(client.allFlags());
+	ldContextKey.set('anonymous');
 }

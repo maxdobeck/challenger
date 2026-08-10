@@ -10,6 +10,7 @@ import { team, match, tournament, tournamentAttendee, userProfile } from './sche
 import {
 	STATIC_USER,
 	TEST_USER,
+	TOURNEY_USER,
 	teamNames,
 	FAKE_PLAYERS,
 	STATIC_USER_MATCH_COUNT,
@@ -128,6 +129,11 @@ async function seedUsers() {
 	if (testUser.created) created++;
 	else skipped++;
 
+	const tourneyUser = await seedUser(TOURNEY_USER.name, TOURNEY_USER.email);
+	userIds.push(tourneyUser.id);
+	if (tourneyUser.created) created++;
+	else skipped++;
+
 	for (const name of FAKE_PLAYERS) {
 		const email = killteamEmail(name);
 		const user = await seedUser(name, email);
@@ -137,7 +143,12 @@ async function seedUsers() {
 	}
 
 	console.log(`Users: ${created} created, ${skipped} already existed.`);
-	return { staticUserId: staticUser.id, testUserId: testUser.id, userIds };
+	return {
+		staticUserId: staticUser.id,
+		testUserId: testUser.id,
+		tourneyUserId: tourneyUser.id,
+		userIds
+	};
 }
 
 async function seedTournaments(staticUserId: string) {
@@ -186,7 +197,8 @@ async function seedMatches(
 	userIds: string[],
 	teams: Array<{ id: number; name: string }>,
 	tournaments: Array<{ id: number }>,
-	casualOnlyIds: Set<string>
+	casualOnlyIds: Set<string>,
+	tournamentForcedIds: Set<string>
 ) {
 	// Regenerated every run so per-user match counts always match the current
 	// targets below, rather than accumulating from whatever a prior run left.
@@ -195,10 +207,17 @@ async function seedMatches(
 	// ~40% of matches are tied to a tournament; the rest are casual (null).
 	// Any match involving a "casual-only" account (Max, test1) is forced casual
 	// so those users have zero tournament matches — hasPlayedTournament stays
-	// false for them, giving the LD segment a real split to target.
+	// false for them, giving the LD segment a real split to target. The inverse
+	// "tournament-forced" accounts (testTourney) get every match tied to a
+	// tournament, so hasPlayedTournament is always true across many events.
+	// Casual-only wins ties: a testTourney-vs-Max match stays casual, keeping
+	// Max/test1 tournament-free.
 	const tournamentIds = tournaments.map((t) => t.id);
 	function pickTournamentId(player1Id: string, player2Id: string): number | null {
 		if (casualOnlyIds.has(player1Id) || casualOnlyIds.has(player2Id)) return null;
+		if (tournamentForcedIds.has(player1Id) || tournamentForcedIds.has(player2Id)) {
+			return randomItem(tournamentIds);
+		}
 		return Math.random() < 0.4 ? randomItem(tournamentIds) : null;
 	}
 
@@ -275,11 +294,19 @@ async function seedUserProfiles() {
 
 async function main() {
 	const teams = await seedTeams();
-	const { staticUserId, testUserId, userIds } = await seedUsers();
+	const { staticUserId, testUserId, tourneyUserId, userIds } = await seedUsers();
 	const tournaments = await seedTournaments(staticUserId);
 	await seedAttendees(staticUserId, userIds, tournaments);
-	// Max and test1 are kept tournament-free so hasPlayedTournament is false for them.
-	await seedMatches(staticUserId, userIds, teams, tournaments, new Set([staticUserId, testUserId]));
+	// Max and test1 are kept tournament-free so hasPlayedTournament is false for
+	// them; testTourney is forced tournament-only so hasPlayedTournament is true.
+	await seedMatches(
+		staticUserId,
+		userIds,
+		teams,
+		tournaments,
+		new Set([staticUserId, testUserId]),
+		new Set([tourneyUserId])
+	);
 	await seedUserProfiles();
 
 	console.log('\nSeed complete.');
