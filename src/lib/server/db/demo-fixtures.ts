@@ -12,6 +12,15 @@ export type Rng = () => number;
 // name/email/password so you can reliably log in as "max".
 export const STATIC_USER = { name: 'Max', email: 'max@killteam.example' };
 
+// Extra fixed account for manual testing, alongside the STATIC_USER.
+export const TEST_USER = { name: 'test1', email: 'test1@killteam.example' };
+
+// Derives a seeded player's email from their display name. Shared with the seed
+// script so the login dropdown's addresses can never drift from what's seeded.
+export function killteamEmail(name: string): string {
+	return `${name.toLowerCase().replace(/\s+/g, '.')}@killteam.example`;
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const teamNames = readFileSync(path.resolve(__dirname, '../../../../teams.txt'), 'utf-8')
 	.split('\n')
@@ -67,6 +76,20 @@ export const FAKE_PLAYERS = [
 	'Thane Grimhold',
 	'Una Stormcaller',
 	'Vance Hollowmere'
+];
+
+// Every seeded account shares this password (see seed.ts). Surfaced here so the
+// login page's demo-account action can sign these accounts in.
+export const DEMO_LOGIN_PASSWORD = 'password123';
+
+// Curated subset of seeded accounts offered in the login page's "demo account"
+// dropdown. All are guaranteed to exist after `npm run db:seed`: Max and test1
+// are the fixed accounts and the rest are the leading FAKE_PLAYERS, every one
+// created with DEMO_LOGIN_PASSWORD.
+export const DEMO_LOGIN_ACCOUNTS: ReadonlyArray<{ name: string; email: string }> = [
+	{ name: STATIC_USER.name, email: STATIC_USER.email },
+	{ name: TEST_USER.name, email: TEST_USER.email },
+	...FAKE_PLAYERS.slice(0, 3).map((name) => ({ name, email: killteamEmail(name) }))
 ];
 
 // Match-count targets: Max always gets exactly this many, everyone else gets
