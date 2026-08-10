@@ -46,7 +46,13 @@ export async function initLD() {
 		// SessionReplay records user sessions for playback in LaunchDarkly;
 		// 'default' privacy masks inputs while keeping the replay useful.
 		plugins: [
-			new Observability({ tracingOrigins: true }),
+			// `version` is the deploy's git SHA (see vite.config `define`), matching
+			// the sourcemaps uploaded to LD so production stack traces de-minify.
+			new Observability({
+				tracingOrigins: true,
+				serviceName: 'challenger',
+				version: __APP_VERSION__
+			}),
 			new SessionReplay({ privacySetting: 'default' })
 		]
 	});

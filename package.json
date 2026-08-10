@@ -7,6 +7,7 @@
 		"dev": "vite dev",
 		"dev:demo": "vite dev --mode demo",
 		"build": "vite build",
+		"vercel-build": "vite build && node scripts/upload-sourcemaps.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
