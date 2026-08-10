@@ -1,7 +1,9 @@
 import { writable } from 'svelte/store';
 import { initialize, type LDClient, type LDFlagChangeset } from 'launchdarkly-js-client-sdk';
-import Observability from '@launchdarkly/observability';
-import SessionReplay from '@launchdarkly/session-replay';
+// Observability and SessionReplay (the latter bundles rrweb) are the heaviest
+// deps in the app. They're loaded via dynamic import() inside initLD() so the
+// bundler splits them into their own chunks fetched at LD-init time, keeping
+// them out of the initial page bundle.
 // Dynamic (not static) so the build never fails when PUBLIC_LD_CLIENT_ID is
 // absent — e.g. CI/e2e builds without the env var. It's read at runtime and
 // simply undefined when unset, which initLD() guards against below.
@@ -31,6 +33,11 @@ export const ldContextKey = writable<string | null>(null);
 export async function initLD() {
 	const clientId = env.PUBLIC_LD_CLIENT_ID;
 	if (!clientId || client) return;
+	// Loaded on demand so they land in separate chunks rather than the initial bundle.
+	const [{ default: Observability }, { default: SessionReplay }] = await Promise.all([
+		import('@launchdarkly/observability'),
+		import('@launchdarkly/session-replay')
+	]);
 	client = initialize(clientId, buildAnonymousContext(), {
 		streaming: true,
 		// Auto-captures frontend errors, console logs, web vitals, network
@@ -43,7 +50,14 @@ export async function initLD() {
 			new SessionReplay({ privacySetting: 'default' })
 		]
 	});
-	await client.waitForInitialization(2);
+
+	try {
+		await client.waitForInitialization(5);
+		console.log('LaunchDarkly client started!!!');
+	} catch (err) {
+		console.error('Launch Darkly error!!!: ', err);
+	}
+
 	flags.set(client.allFlags());
 	ldContextKey.set('anonymous');
 	ldReady.set(true);
