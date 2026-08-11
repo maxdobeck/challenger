@@ -27,6 +27,13 @@ test('leaderboard table can be re-sorted by clicking a column header', async ({ 
 });
 
 test('hovering a leaderboard row changes its background color', async ({ page }) => {
+	// Client-side LaunchDarkly flags resolve after load and can add/remove
+	// elements above the table. If that happens mid-hover the row slides out
+	// from under the cursor, the 700ms background transition (app.css) reverses,
+	// and the assertion below never sees the hover color. Let the layout settle
+	// first.
+	await page.waitForLoadState('networkidle');
+
 	const row = page.locator('tbody tr').nth(1);
 
 	const colorBefore = await row.evaluate((el) => getComputedStyle(el).backgroundColor);

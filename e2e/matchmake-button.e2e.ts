@@ -10,7 +10,7 @@ import { loginAsMax } from './helpers';
 // passes either way while still exercising the click whenever it's present.
 async function clickIfPresent(button: Locator, times: number) {
 	try {
-		await button.waitFor({ state: 'visible', timeout: 5000 });
+		await button.waitFor({ state: 'visible', timeout: 1000 });
 	} catch {
 		return false;
 	}

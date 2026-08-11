@@ -17,6 +17,13 @@ if (!process.env.DATABASE_URL && existsSync('.env.demo')) {
 }
 
 export default defineConfig({
-	webServer: { command: 'npm run build && npm run preview', port: 4173 },
-	testMatch: '**/*.e2e.{ts,js}'
+	webServer: { command: 'npm run build && npm run preview', port: 4173, reuseExistingServer: !process.env.CI },
+	testMatch: '**/*.e2e.{ts,js}',
+	globalSetup: './e2e/global-setup.ts',
+	workers: 10,
+	// 10 concurrent workers can outpace the single `npm run preview` process
+	// (occasional ERR_CONNECTION_REFUSED under the burst of simultaneous
+	// logins) -- retry on CI to absorb that without masking real failures
+	// locally during dev.
+	retries: process.env.CI ? 2 : 0
 });
