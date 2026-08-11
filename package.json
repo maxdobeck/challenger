@@ -15,7 +15,8 @@
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
 		"test:e2e": "playwright install && playwright test",
-		"test": "npm run test:e2e",
+		"test:unit": "vitest run",
+		"test": "npm run test:unit && npm run test:e2e",
 		"db:start": "docker compose up",
 		"db:up": "docker compose up -d",
 		"db:push": "drizzle-kit push",
@@ -51,7 +52,8 @@
 		"tsx": "^4.23.8",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.66.0",
-		"vite": "^8.0.16"
+		"vite": "^8.0.16",
+		"vitest": "^4.1.10"
 	},
 	"dependencies": {
 		"@launchdarkly/observability": "^1.1.18",
