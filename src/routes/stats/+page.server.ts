@@ -6,6 +6,7 @@ import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { match, team, tournament, user } from '$lib/server/db/schema';
 import { getDemoStatsRows, getDemoUserName } from '$lib/server/demo/data';
+import { outcomeFor, totalScore, winRate } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -92,14 +93,22 @@ export const load: PageServerLoad = async (event) => {
 	for (const row of rows) {
 		const youArePlayer1 = row.player1Id === targetUserId;
 		const yourTeam = youArePlayer1 ? row.player1TeamName : row.player2TeamName;
-		const yourTotal = youArePlayer1
-			? row.player1Crit + row.player1Tac + row.player1Kill + row.player1Primary
-			: row.player2Crit + row.player2Tac + row.player2Kill + row.player2Primary;
-		const opponentTotal = youArePlayer1
-			? row.player2Crit + row.player2Tac + row.player2Kill + row.player2Primary
-			: row.player1Crit + row.player1Tac + row.player1Kill + row.player1Primary;
+		const player1Total = totalScore({
+			crit: row.player1Crit,
+			tac: row.player1Tac,
+			kill: row.player1Kill,
+			primary: row.player1Primary
+		});
+		const player2Total = totalScore({
+			crit: row.player2Crit,
+			tac: row.player2Tac,
+			kill: row.player2Kill,
+			primary: row.player2Primary
+		});
+		const yourTotal = youArePlayer1 ? player1Total : player2Total;
+		const opponentTotal = youArePlayer1 ? player2Total : player1Total;
 
-		const result = yourTotal > opponentTotal ? 'win' : yourTotal < opponentTotal ? 'loss' : 'draw';
+		const result = outcomeFor(yourTotal, opponentTotal);
 		if (result === 'win') totalWins++;
 		else if (result === 'loss') totalLosses++;
 		else totalDraws++;
@@ -135,11 +144,11 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const teamStats = [...byTeam.values()]
-		.map((t) => ({ ...t, winRate: t.games ? t.wins / t.games : 0 }))
+		.map((t) => ({ ...t, winRate: winRate(t.wins, t.games) }))
 		.sort((a, b) => b.games - a.games);
 
 	const tournamentStats = [...byTournament.values()]
-		.map((t) => ({ ...t, winRate: t.games ? t.wins / t.games : 0 }))
+		.map((t) => ({ ...t, winRate: winRate(t.wins, t.games) }))
 		.sort((a, b) => b.games - a.games);
 
 	const totalGames = rows.length;
@@ -153,7 +162,7 @@ export const load: PageServerLoad = async (event) => {
 			totalWins,
 			totalLosses,
 			totalDraws,
-			winRate: totalGames ? totalWins / totalGames : 0,
+			winRate: winRate(totalWins, totalGames),
 			favoriteTeam
 		},
 		viewingOwnStats,

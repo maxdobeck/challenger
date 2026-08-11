@@ -6,6 +6,7 @@ import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { match, team, tournament, tournamentAttendee, user } from '$lib/server/db/schema';
 import { getDemoTournamentDetail } from '$lib/server/demo/data';
+import { matchOutcome, totalScore } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -78,10 +79,19 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const matches = matchRows.map((r) => {
-		const player1Total = r.player1Crit + r.player1Tac + r.player1Kill + r.player1Primary;
-		const player2Total = r.player2Crit + r.player2Tac + r.player2Kill + r.player2Primary;
-		const result =
-			player1Total > player2Total ? 'p1' : player1Total < player2Total ? 'p2' : 'draw';
+		const player1Total = totalScore({
+			crit: r.player1Crit,
+			tac: r.player1Tac,
+			kill: r.player1Kill,
+			primary: r.player1Primary
+		});
+		const player2Total = totalScore({
+			crit: r.player2Crit,
+			tac: r.player2Tac,
+			kill: r.player2Kill,
+			primary: r.player2Primary
+		});
+		const result = matchOutcome(player1Total, player2Total);
 		return {
 			id: r.id,
 			playedAt: r.playedAt,

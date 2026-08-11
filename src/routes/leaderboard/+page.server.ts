@@ -6,6 +6,7 @@ import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { match, team, user } from '$lib/server/db/schema';
 import { getDemoLeaderboardRows } from '$lib/server/demo/data';
+import { outcomeFor, pickBestTeam, totalScore, winRate } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -86,40 +87,36 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	for (const row of rows) {
-		const p1Total = row.player1Crit + row.player1Tac + row.player1Kill + row.player1Primary;
-		const p2Total = row.player2Crit + row.player2Tac + row.player2Kill + row.player2Primary;
-		const p1Result = p1Total > p2Total ? 'win' : p1Total < p2Total ? 'loss' : 'draw';
-		const p2Result = p2Total > p1Total ? 'win' : p2Total < p1Total ? 'loss' : 'draw';
+		const p1Total = totalScore({
+			crit: row.player1Crit,
+			tac: row.player1Tac,
+			kill: row.player1Kill,
+			primary: row.player1Primary
+		});
+		const p2Total = totalScore({
+			crit: row.player2Crit,
+			tac: row.player2Tac,
+			kill: row.player2Kill,
+			primary: row.player2Primary
+		});
+		const p1Result = outcomeFor(p1Total, p2Total);
+		const p2Result = outcomeFor(p2Total, p1Total);
 
 		record(row.player1Id, row.player1Name, row.player1TeamName, p1Result);
 		record(row.player2Id, row.player2Name, row.player2TeamName, p2Result);
 	}
 
 	const leaderboard = [...byUser.values()]
-		.map((u) => {
-			let bestTeam: string | null = null;
-			let bestWinRate = -1;
-			let bestGames = 0;
-			for (const [teamName, stats] of u.teamWins) {
-				const winRate = stats.wins / stats.games;
-				if (winRate > bestWinRate || (winRate === bestWinRate && stats.games > bestGames)) {
-					bestWinRate = winRate;
-					bestGames = stats.games;
-					bestTeam = teamName;
-				}
-			}
-
-			return {
-				userId: u.userId,
-				userName: u.userName,
-				games: u.games,
-				wins: u.wins,
-				losses: u.losses,
-				draws: u.draws,
-				winRate: u.games ? u.wins / u.games : 0,
-				bestTeam
-			};
-		})
+		.map((u) => ({
+			userId: u.userId,
+			userName: u.userName,
+			games: u.games,
+			wins: u.wins,
+			losses: u.losses,
+			draws: u.draws,
+			winRate: winRate(u.wins, u.games),
+			bestTeam: pickBestTeam(u.teamWins)
+		}))
 		.sort((a, b) => b.winRate - a.winRate || b.games - a.games);
 
 	return { leaderboard, currentUserId: event.locals.user.id };
