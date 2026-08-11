@@ -77,6 +77,40 @@ export const FAKE_PLAYERS = [
 	'Vance Hollowmere'
 ];
 
+// Players who never attend a tournament, so every match they appear in is
+// casual and their `hasPlayedTournament` LD attribute stays false. FAKE_PLAYERS
+// above are all tournament-eligible and in practice nearly every one of them
+// picks up at least one tournament match, which left the
+// `non-tournament-players` segment with only Max and test1 in it — too small a
+// population for the `social-matchmake-cta` experiment to accumulate subjects.
+// These 20 widen that segment naturally, in both real-auth and demo mode.
+//
+// Names are fixed constants rather than faker-generated because they're shared
+// fixtures: seed.ts and demo/data.ts must derive identical emails from them, so
+// the login form accepts the same addresses in both modes.
+export const CASUAL_PLAYERS = [
+	'Alaric Emberwind',
+	'Briar Voidwalker',
+	'Cassia Duskbane',
+	'Dorian Frostmere',
+	'Eira Stormvale',
+	'Fenwick Ashgrove',
+	'Greta Ironsong',
+	'Hollis Nightforge',
+	'Imogen Ravenfall',
+	'Jasper Coldhearth',
+	'Kira Shadowmoor',
+	'Lucian Grimwater',
+	'Mira Thornfield',
+	'Nolan Blackfen',
+	'Odessa Winterbourne',
+	'Perrin Slatecrag',
+	'Rowan Duskwater',
+	'Sable Marrowvale',
+	'Tobias Emberhold',
+	'Vera Nightgale'
+];
+
 // Every seeded account shares this password (see seed.ts). Surfaced here so the
 // login page's demo-account action can sign these accounts in.
 export const DEMO_LOGIN_PASSWORD = 'password123';

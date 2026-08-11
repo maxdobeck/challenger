@@ -61,6 +61,13 @@ jobs:
       DATABASE_URL: postgres://root:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/local
       ORIGIN: http://localhost:4173
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+      # Points at the production LD environment on purpose: this job's traffic
+      # is meant to feed the `social-matchmake-cta` experiment. Stored as a
+      # secret (it's a client-side ID, so not actually sensitive -- a repo
+      # variable would do just as well and would show unmasked in logs).
+      # If it's unset, initLD() silently no-ops and the job still passes -- so
+      # a green run is not on its own proof that traffic was sent.
+      PUBLIC_LD_CLIENT_ID: ${{ secrets.PUBLIC_LD_CLIENT_ID }}
 
     steps:
       - uses: actions/checkout@v5

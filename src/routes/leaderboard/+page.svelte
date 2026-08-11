@@ -1,9 +1,14 @@
 <script lang="ts">
 	import type { PageServerData } from './$types';
 	import SortableTable from '$lib/components/SortableTable.svelte';
-	import { flags } from '$lib/stores/launchdarkly';
+	import { flagVariation } from '$lib/stores/launchdarkly';
 
 	let { data }: { data: PageServerData } = $props();
+
+	// Read through variation() rather than the bulk `flags` store: this flag is
+	// under an experiment (social-matchmake-cta), and the evaluation event is
+	// what enrolls the context as a subject.
+	const matchmakeEnabled = flagVariation('social-matchmake', false);
 
 	// Reports the unfinished feature to LaunchDarkly Observability with an
 	// explicit message and component context, rather than throwing an uncaught
@@ -38,8 +43,13 @@
 
 <h1>Leaderboard</h1>
 
-{#if $flags['social-matchmake']}
-	<p><button type="button" class="button" onclick={matchmake}>Matchmake Now!</button></p>
+{#if $matchmakeEnabled}
+	<!-- The id is load-bearing: the `matchmake-click-rate` click metric in
+	     LaunchDarkly targets `#matchmake-now`. Renaming it silently zeroes out
+	     the experiment's conversions. -->
+	<p>
+		<button type="button" class="button" id="matchmake-now" onclick={matchmake}>Matchmake Now!</button>
+	</p>
 {/if}
 
 {#if data.leaderboard.length === 0}

@@ -1,9 +1,14 @@
 <script lang="ts">
 	import type { PageServerData } from './$types';
 	import SortableTable from '$lib/components/SortableTable.svelte';
-	import { flags } from '$lib/stores/launchdarkly';
+	import { flagVariation } from '$lib/stores/launchdarkly';
 
 	let { data }: { data: PageServerData } = $props();
+
+	// Read through variation() rather than the bulk `flags` store: this flag is
+	// under an experiment (social-matchmake-cta), and the evaluation event is
+	// what enrolls the context as a subject.
+	const matchmakeEnabled = flagVariation('social-matchmake', false);
 
 	// Reports the unfinished feature to LaunchDarkly Observability with an
 	// explicit message and component context, rather than throwing an uncaught
@@ -51,8 +56,13 @@
 
 <h1>{data.viewingOwnStats ? 'My Stats' : `${data.playerName} Stats`}</h1>
 
-{#if $flags['social-matchmake']}
-	<p><button type="button" class="button" onclick={matchmake}>Matchmake Now!</button></p>
+{#if $matchmakeEnabled}
+	<!-- Same id as the leaderboard's button (separate routes, so no duplicate-id
+	     conflict). The `matchmake-click-rate` metric currently scopes its URL
+	     matcher to /leaderboard, so clicks here are deliberately not counted. -->
+	<p>
+		<button type="button" class="button" id="matchmake-now" onclick={matchmake}>Matchmake Now!</button>
+	</p>
 {/if}
 
 <div class="card">

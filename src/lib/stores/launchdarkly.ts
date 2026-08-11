@@ -1,14 +1,22 @@
-import { writable } from 'svelte/store';
+import { derived, writable, type Readable } from 'svelte/store';
 import { initialize, type LDClient, type LDFlagChangeset } from 'launchdarkly-js-client-sdk';
 // Observability and SessionReplay (the latter bundles rrweb) are the heaviest
 // deps in the app. They're loaded via dynamic import() inside initLD() so the
 // bundler splits them into their own chunks fetched at LD-init time, keeping
 // them out of the initial page bundle.
 // Dynamic (not static) so the build never fails when PUBLIC_LD_CLIENT_ID is
-// absent — e.g. CI/e2e builds without the env var. It's read at runtime and
-// simply undefined when unset, which initLD() guards against below.
+// absent — it's read at runtime and simply undefined when unset, which
+// initLD() falls back from (see DEFAULT_LD_CLIENT_ID below).
 import { env } from '$env/dynamic/public';
 import { buildAnonymousContext } from '$lib/launchdarkly/context';
+
+// Client-side ID for the `challenger` LaunchDarkly production environment.
+// Deliberately committed: client-side IDs are not secret — the SDK ships this
+// string to every browser that loads the app — so hardcoding it means a fresh
+// checkout, demo mode and CI all emit real flag evaluations with no env wiring
+// at all. PUBLIC_LD_CLIENT_ID still overrides it, for pointing a deploy at a
+// different LD environment.
+const DEFAULT_LD_CLIENT_ID = '6a761baeb7c4670ad5fc4aee';
 
 let client: LDClient | null = null;
 
@@ -31,7 +39,7 @@ export const ldContextKey = writable<string | null>(null);
  * so local dev without LaunchDarkly still runs.
  */
 export async function initLD() {
-	const clientId = env.PUBLIC_LD_CLIENT_ID;
+	const clientId = env.PUBLIC_LD_CLIENT_ID || DEFAULT_LD_CLIENT_ID;
 	if (!clientId || client) return;
 	// Loaded on demand so they land in separate chunks rather than the initial bundle.
 	const [{ default: Observability }, { default: SessionReplay }] = await Promise.all([
@@ -75,6 +83,30 @@ export async function initLD() {
 			}
 			return next;
 		});
+	});
+}
+
+/**
+ * A single flag's value, read through `variation()` rather than the `flags`
+ * store above.
+ *
+ * The distinction matters for Experimentation: `allFlags()` (which fills
+ * `flags`) is a bulk local read that sends nothing to LaunchDarkly, while
+ * `variation()` emits an evaluation event — and that event *is* the experiment
+ * exposure. A flag rule with an experiment rollout only enrols a context once
+ * it has been evaluated, so anything gating on a flag under experiment must
+ * read it through here or the experiment never sees the subject.
+ *
+ * Re-evaluates when the client becomes ready, when the context changes
+ * (anonymous → identified, so exposure is attributed to the real user key and
+ * its attributes), and when a streamed update changes the value. Yields
+ * `defaultValue` when no client is configured, so demo mode — where `initLD()`
+ * no-ops — still renders.
+ */
+export function flagVariation<T>(key: string, defaultValue: T): Readable<T> {
+	return derived([ldReady, ldContextKey, flags], () => {
+		if (!client) return defaultValue;
+		return client.variation(key, defaultValue) as T;
 	});
 }
 
