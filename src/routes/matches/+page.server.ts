@@ -12,6 +12,7 @@ import {
 	getDemoTournamentOptions,
 	getDemoUserMatchRows
 } from '$lib/server/demo/data';
+import { outcomeFor, totalScore } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -90,9 +91,9 @@ export const load: PageServerLoad = async (event) => {
 			kill: youArePlayer1 ? r.player2Kill : r.player1Kill,
 			primary: youArePlayer1 ? r.player2Primary : r.player1Primary
 		};
-		const yourTotal = you.crit + you.tac + you.kill + you.primary;
-		const opponentTotal = opponent.crit + opponent.tac + opponent.kill + opponent.primary;
-		const result = yourTotal > opponentTotal ? 'win' : yourTotal < opponentTotal ? 'loss' : 'draw';
+		const yourTotal = totalScore(you);
+		const opponentTotal = totalScore(opponent);
+		const result = outcomeFor(yourTotal, opponentTotal);
 
 		return {
 			id: r.id,

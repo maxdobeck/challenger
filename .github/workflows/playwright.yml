@@ -7,6 +7,20 @@ on:
     branches: [main]
 
 jobs:
+  # Unit tests: pure logic (e.g. src/lib/server/scoring.ts), no browser or DB needed.
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:unit
+
   # Demo mode: no database. playwright.config.ts loads .env.demo (DEMO_MODE=true)
   # because DATABASE_URL is unset, so the build + preview run entirely in-memory.
   # The real-auth tests skip themselves in demo mode.
