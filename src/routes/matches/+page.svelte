@@ -1,9 +1,15 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import ScorePhotoScan from '$lib/components/ScorePhotoScan.svelte';
 	import TournamentCombobox from '$lib/components/TournamentCombobox.svelte';
 	import type { ActionData, PageServerData } from './$types';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
+
+	let scores = $state({
+		player1: { crit: 0, tac: 0, kill: 0, primary: 0 },
+		player2: { crit: 0, tac: 0, kill: 0, primary: 0 }
+	});
 
 	function formatDate(d: string | Date) {
 		return new Date(d).toLocaleDateString(undefined, {
@@ -34,6 +40,7 @@
 	<div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
 		<fieldset style="flex:1; min-width:220px; border:1px solid var(--color-border); border-radius:6px;">
 			<legend>You</legend>
+			<ScorePhotoScan label="You" bind:scores={scores.player1} />
 			<label>
 				Your team
 				<select name="player1TeamId" required>
@@ -46,25 +53,32 @@
 			<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 				<label style="flex:1;">
 					Crit (0-6)
-					<input type="number" name="player1Crit" min="0" max="6" value="0" />
+					<input type="number" name="player1Crit" min="0" max="6" bind:value={scores.player1.crit} />
 				</label>
 				<label style="flex:1;">
 					Tac (0-6)
-					<input type="number" name="player1Tac" min="0" max="6" value="0" />
+					<input type="number" name="player1Tac" min="0" max="6" bind:value={scores.player1.tac} />
 				</label>
 				<label style="flex:1;">
 					Kill (0-6)
-					<input type="number" name="player1Kill" min="0" max="6" value="0" />
+					<input type="number" name="player1Kill" min="0" max="6" bind:value={scores.player1.kill} />
 				</label>
 				<label style="flex:1;">
 					Primary (0-3)
-					<input type="number" name="player1Primary" min="0" max="3" value="0" />
+					<input
+						type="number"
+						name="player1Primary"
+						min="0"
+						max="3"
+						bind:value={scores.player1.primary}
+					/>
 				</label>
 			</div>
 		</fieldset>
 
 		<fieldset style="flex:1; min-width:220px; border:1px solid var(--color-border); border-radius:6px;">
 			<legend>Opponent</legend>
+			<ScorePhotoScan label="Opponent" bind:scores={scores.player2} />
 			<label>
 				Opponent's team
 				<select name="player2TeamId" required>
@@ -77,19 +91,25 @@
 			<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 				<label style="flex:1;">
 					Crit (0-6)
-					<input type="number" name="player2Crit" min="0" max="6" value="0" />
+					<input type="number" name="player2Crit" min="0" max="6" bind:value={scores.player2.crit} />
 				</label>
 				<label style="flex:1;">
 					Tac (0-6)
-					<input type="number" name="player2Tac" min="0" max="6" value="0" />
+					<input type="number" name="player2Tac" min="0" max="6" bind:value={scores.player2.tac} />
 				</label>
 				<label style="flex:1;">
 					Kill (0-6)
-					<input type="number" name="player2Kill" min="0" max="6" value="0" />
+					<input type="number" name="player2Kill" min="0" max="6" bind:value={scores.player2.kill} />
 				</label>
 				<label style="flex:1;">
 					Primary (0-3)
-					<input type="number" name="player2Primary" min="0" max="3" value="0" />
+					<input
+						type="number"
+						name="player2Primary"
+						min="0"
+						max="3"
+						bind:value={scores.player2.primary}
+					/>
 				</label>
 			</div>
 		</fieldset>
