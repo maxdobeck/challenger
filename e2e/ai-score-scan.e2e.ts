@@ -28,6 +28,11 @@ async function mockScanResponse(page: Page, fixture: ScoreScanFixture) {
 async function scanAndApply(page: Page, groupName: 'You' | 'Opponent') {
 	const group = page.getByRole('group', { name: groupName, exact: true });
 
+	// The file input is server-rendered but its change handler only exists once
+	// Svelte hydrates. Setting files before then fires a change event nothing is
+	// listening for, and the scan never starts -- a real flake under parallel load.
+	await page.waitForLoadState('networkidle');
+
 	await group
 		.locator('input[type="file"]')
 		.setInputFiles({
@@ -37,7 +42,10 @@ async function scanAndApply(page: Page, groupName: 'You' | 'Opponent') {
 		});
 
 	const scanResults = group.locator('.scan-results');
-	await expect(scanResults).toBeVisible();
+	// Generous timeout: the client compresses the image on a canvas before the
+	// (stubbed) scan call, and that CPU work gets starved when the suite runs
+	// many workers in parallel.
+	await expect(scanResults).toBeVisible({ timeout: 15000 });
 
 	// Read the draft values before clicking Apply -- applying clears the
 	// draft, so .scan-results disappears from the DOM immediately after.
