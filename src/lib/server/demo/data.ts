@@ -75,7 +75,7 @@ export const DEMO_MODE: boolean = true;
 export const demoTeams: DemoTeam[] = teamNames.map((name, index) => ({ id: index + 1, name }));
 
 // Mirrors DEMO_LOGIN_ACCOUNTS' fixed accounts (Max, test1, testTourney) so the
-// same 15 curated login accounts resolve to real identities — with generated
+// same curated login accounts resolve to real identities — with generated
 // match/tournament history — in demo mode, not just in the seeded DB.
 export const demoUsers: DemoUser[] = [
 	{ id: MAX_ID, name: STATIC_USER.name, email: STATIC_USER.email },

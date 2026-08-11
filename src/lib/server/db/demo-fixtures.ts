@@ -117,16 +117,23 @@ export const DEMO_LOGIN_PASSWORD = 'password123';
 
 // Curated subset of seeded accounts offered in the login page's "demo account"
 // dropdown, and (in demo mode) the actual roster of accounts you can log in
-// as — 15 total, so there's real breadth to click through, with Max/test1/
-// testTourney fixed at the front and the rest the leading FAKE_PLAYERS. All
-// are guaranteed to exist after `npm run db:seed` in real-auth mode (every
-// one created with DEMO_LOGIN_PASSWORD) and are always present in demo
-// mode's in-memory dataset (see $lib/server/demo/data.ts).
+// as — Max/test1/testTourney fixed at the front, then the leading
+// FAKE_PLAYERS, then every CASUAL_PLAYER. All are guaranteed to exist after
+// `npm run db:seed` in real-auth mode (every one created with
+// DEMO_LOGIN_PASSWORD) and are always present in demo mode's in-memory dataset
+// (see $lib/server/demo/data.ts).
+//
+// The CASUAL_PLAYERS are all included on purpose: they're the only accounts
+// eligible for the `social-matchmake-cta` experiment (everyone else has played
+// a tournament and is filtered out by the `non-tournament-players` segment), so
+// without them the dropdown offers no way to reach an account that can show the
+// "Matchmake Now!" button — Max and test1 aside.
 export const DEMO_LOGIN_ACCOUNTS: ReadonlyArray<{ name: string; email: string }> = [
 	{ name: STATIC_USER.name, email: STATIC_USER.email },
 	{ name: TEST_USER.name, email: TEST_USER.email },
 	{ name: TOURNEY_USER.name, email: TOURNEY_USER.email },
-	...FAKE_PLAYERS.slice(0, 12).map((name) => ({ name, email: killteamEmail(name) }))
+	...FAKE_PLAYERS.slice(0, 12).map((name) => ({ name, email: killteamEmail(name) })),
+	...CASUAL_PLAYERS.map((name) => ({ name, email: killteamEmail(name) }))
 ];
 
 // Match-count targets: Max always gets exactly this many, everyone else gets

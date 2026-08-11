@@ -13,7 +13,7 @@ import { signOut, waitForLdIdentified } from './helpers';
 // Every login-capable account in either mode: the 3 fixed accounts plus all
 // of FAKE_PLAYERS (seeded by seed.ts in real-auth mode, and mirrored 1:1 in
 // demo mode's in-memory dataset — see src/lib/server/demo/data.ts). This is a
-// superset of the 15 curated DEMO_LOGIN_ACCOUNTS shown in the /login
+// superset of the curated DEMO_LOGIN_ACCOUNTS shown in the /login
 // dropdown: signing in through the email/password form accepts any of these
 // in both modes (see the signInEmail action in
 // src/routes/login/+page.server.ts), not just the curated ones.
