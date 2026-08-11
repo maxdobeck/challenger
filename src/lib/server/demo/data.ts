@@ -4,6 +4,7 @@ import {
 	TOURNEY_USER,
 	teamNames,
 	FAKE_PLAYERS,
+	CASUAL_PLAYERS,
 	killteamEmail,
 	STATIC_USER_MATCH_COUNT,
 	RANDOM_MATCH_COUNT_RANGE,
@@ -74,7 +75,7 @@ export const DEMO_MODE: boolean = true;
 export const demoTeams: DemoTeam[] = teamNames.map((name, index) => ({ id: index + 1, name }));
 
 // Mirrors DEMO_LOGIN_ACCOUNTS' fixed accounts (Max, test1, testTourney) so the
-// same 15 curated login accounts resolve to real identities — with generated
+// same curated login accounts resolve to real identities — with generated
 // match/tournament history — in demo mode, not just in the seeded DB.
 export const demoUsers: DemoUser[] = [
 	{ id: MAX_ID, name: STATIC_USER.name, email: STATIC_USER.email },
@@ -84,8 +85,18 @@ export const demoUsers: DemoUser[] = [
 		id: `demo-player-${index + 1}`,
 		name,
 		email: killteamEmail(name)
+	})),
+	...CASUAL_PLAYERS.map((name, index) => ({
+		id: `demo-casual-${index + 1}`,
+		name,
+		email: killteamEmail(name)
 	}))
 ];
+
+// The casual-only cohort: never registered for a tournament below, so every
+// match they appear in is casual and hasPlayedTournament stays false. Mirrors
+// seed.ts's casualOnlyIds — see CASUAL_PLAYERS in demo-fixtures.ts.
+const casualOnlyIds = new Set(CASUAL_PLAYERS.map((_, index) => `demo-casual-${index + 1}`));
 
 // Full `User`-shaped record (the auth session shape) for a demo account, built
 // on demand rather than stored per-user since it's only needed once a login
@@ -139,8 +150,10 @@ for (let i = 1; i <= DEMO_TOURNAMENT_COUNT; i++) {
 
 // Register a random subset of players per tournament. Max is never an attendee —
 // he's the demo's "no tournaments yet" persona, so his By-Tournament stats stay
-// empty and the "Matchmake Now!" button shows for him.
-const nonMaxUsers = demoUsers.filter((u) => u.id !== MAX_ID);
+// empty and the "Matchmake Now!" button shows for him. The CASUAL_PLAYERS cohort
+// is excluded for the same reason, giving the `non-tournament-players` LD
+// segment a real population rather than just Max and test1.
+const nonMaxUsers = demoUsers.filter((u) => u.id !== MAX_ID && !casualOnlyIds.has(u.id));
 export const demoAttendees: DemoAttendee[] = [];
 for (const t of demoTournaments) {
 	const target = randomInt(2, 12, rng);

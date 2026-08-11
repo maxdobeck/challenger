@@ -13,6 +13,7 @@ import {
 	TOURNEY_USER,
 	teamNames,
 	FAKE_PLAYERS,
+	CASUAL_PLAYERS,
 	STATIC_USER_MATCH_COUNT,
 	RANDOM_MATCH_COUNT_RANGE,
 	killteamEmail,
@@ -158,11 +159,24 @@ async function seedUsers() {
 		else skipped++;
 	}
 
+	// Tracked separately so main() can mark them casual-only; they still go into
+	// userIds so they get casual match history like everyone else.
+	const casualPlayerIds: string[] = [];
+	for (const name of CASUAL_PLAYERS) {
+		const email = killteamEmail(name);
+		const user = await seedUser(name, email);
+		userIds.push(user.id);
+		casualPlayerIds.push(user.id);
+		if (user.created) created++;
+		else skipped++;
+	}
+
 	console.log(`Users: ${created} created, ${skipped} already existed.`);
 	return {
 		staticUserId: staticUser.id,
 		testUserId: testUser.id,
 		tourneyUserId: tourneyUser.id,
+		casualPlayerIds,
 		userIds
 	};
 }
@@ -191,8 +205,8 @@ async function seedAttendees(
 	casualOnlyIds: Set<string>,
 	tournamentForcedIds: Set<string>
 ): Promise<Map<number, string[]>> {
-	// Casual-only accounts (Max, test1) are never registered for a tournament, so
-	// they can never pick up a tournament match below.
+	// Casual-only accounts (Max, test1, CASUAL_PLAYERS) are never registered for a
+	// tournament, so they can never pick up a tournament match below.
 	const eligible = userIds.filter((id) => !casualOnlyIds.has(id));
 	const forced = [...tournamentForcedIds];
 
@@ -259,8 +273,8 @@ async function seedMatches(
 
 	// Tournament matches: each event plays ceil(attendees / 2) matches, pairing its
 	// attendees so everyone plays at least once (an odd attendee out gets a rematch).
-	// Casual-only accounts (Max, test1) are never attendees, so they never appear here
-	// and their hasPlayedTournament attribute stays false.
+	// Casual-only accounts (Max, test1, CASUAL_PLAYERS) are never attendees, so they
+	// never appear here and their hasPlayedTournament attribute stays false.
 	let tournamentMatches = 0;
 	for (const [tournamentId, attendeeIds] of attendeesByTournament) {
 		if (attendeeIds.length < 2) continue;
@@ -334,11 +348,13 @@ async function seedUserProfiles() {
 
 async function main() {
 	const teams = await seedTeams();
-	const { staticUserId, testUserId, tourneyUserId, userIds } = await seedUsers();
+	const { staticUserId, testUserId, tourneyUserId, casualPlayerIds, userIds } = await seedUsers();
 	const tournaments = await seedTournaments(staticUserId);
-	// Max and test1 are kept tournament-free (never attendees) so hasPlayedTournament
-	// is false for them; testTourney is forced tournament-only so it's always true.
-	const casualOnlyIds = new Set([staticUserId, testUserId]);
+	// Max, test1 and the CASUAL_PLAYERS are kept tournament-free (never attendees)
+	// so hasPlayedTournament is false for them; testTourney is forced
+	// tournament-only so it's always true. The casual players exist to give the
+	// `non-tournament-players` LD segment a real population — see demo-fixtures.ts.
+	const casualOnlyIds = new Set([staticUserId, testUserId, ...casualPlayerIds]);
 	const tournamentForcedIds = new Set([tourneyUserId]);
 	const attendeesByTournament = await seedAttendees(
 		userIds,

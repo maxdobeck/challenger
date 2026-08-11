@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_LOGIN_ACCOUNTS } from '../src/lib/server/db/demo-fixtures';
+import {
+	DEMO_LOGIN_ACCOUNTS,
+	CASUAL_PLAYERS,
+	killteamEmail
+} from '../src/lib/server/db/demo-fixtures';
 import { signOut } from './helpers';
 
 // DEMO_LOGIN_ACCOUNTS is the single curated list behind the login page's
@@ -8,13 +12,27 @@ import { signOut } from './helpers';
 // $lib/server/demo/data.ts) in demo mode. Driving login purely through that
 // dropdown + "Login as ..." button — rather than typing email/password —
 // means this test needs no direct DB access and passes in either mode.
-test.describe('logging in as each of the 15 curated demo accounts', () => {
-	test('the curated list has 15 accounts, at least 2 on the challenger.example.com domain', () => {
-		expect(DEMO_LOGIN_ACCOUNTS.length).toBe(15);
+test.describe('logging in as each of the curated demo accounts', () => {
+	test('the curated list is well-formed and reaches every experiment-eligible account', () => {
+		// 3 fixed accounts + 12 FAKE_PLAYERS + every CASUAL_PLAYER.
+		expect(DEMO_LOGIN_ACCOUNTS.length).toBe(15 + CASUAL_PLAYERS.length);
+
 		const challengerDomainAccounts = DEMO_LOGIN_ACCOUNTS.filter((a) =>
 			a.email.toLowerCase().endsWith('@challenger.example.com')
 		);
 		expect(challengerDomainAccounts.length).toBeGreaterThanOrEqual(2);
+
+		// Every casual player must be selectable from the dropdown: they're the
+		// only accounts the `social-matchmake-cta` experiment can enrol, so
+		// dropping them would leave no way to demo the "Matchmake Now!" button.
+		const casualEmails = new Set(CASUAL_PLAYERS.map(killteamEmail));
+		const casualInDropdown = DEMO_LOGIN_ACCOUNTS.filter((a) => casualEmails.has(a.email));
+		expect(casualInDropdown.length).toBe(CASUAL_PLAYERS.length);
+
+		// The "Login as <firstName>" button is addressed by first name, so those
+		// must stay unique across the list or the locator goes ambiguous.
+		const firstNames = DEMO_LOGIN_ACCOUNTS.map((a) => a.name.split(' ')[0]);
+		expect(new Set(firstNames).size).toBe(firstNames.length);
 	});
 
 	for (const account of DEMO_LOGIN_ACCOUNTS) {
