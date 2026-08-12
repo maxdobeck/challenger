@@ -53,34 +53,36 @@
 	});
 </script>
 
-<table class="sortable-table">
-	<thead>
-		<tr>
-			{#if showRank}
-				<th>Rank</th>
-			{/if}
-			{#each columns as col (col.key)}
-				<th>
-					<button type="button" class="sort-button" onclick={() => toggleSort(col.key)}>
-						{col.label}
-						<span class="sort-indicator"
-							>{sortKey === col.key ? (sortDirection === 'asc' ? '▲' : '▼') : ''}</span
-						>
-					</button>
-				</th>
-			{/each}
-		</tr>
-	</thead>
-	<tbody>
-		{#each sortedRows as row, i (rowKey(row, i))}
-			<tr class={rowClass ? rowClass(row, i) : ''}>
+<div class="table-scroll">
+	<table class="sortable-table">
+		<thead>
+			<tr>
 				{#if showRank}
-					<td>{i + 1}</td>
+					<th>Rank</th>
 				{/if}
 				{#each columns as col (col.key)}
-					<td>{@render cell(row, col)}</td>
+					<th>
+						<button type="button" class="sort-button" onclick={() => toggleSort(col.key)}>
+							{col.label}
+							<span class="sort-indicator"
+								>{sortKey === col.key ? (sortDirection === 'asc' ? '▲' : '▼') : ''}</span
+							>
+						</button>
+					</th>
 				{/each}
 			</tr>
-		{/each}
-	</tbody>
-</table>
+		</thead>
+		<tbody>
+			{#each sortedRows as row, i (rowKey(row, i))}
+				<tr class={rowClass ? rowClass(row, i) : ''}>
+					{#if showRank}
+						<td>{i + 1}</td>
+					{/if}
+					{#each columns as col (col.key)}
+						<td>{@render cell(row, col)}</td>
+					{/each}
+				</tr>
+			{/each}
+		</tbody>
+	</table>
+</div>

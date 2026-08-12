@@ -40,8 +40,8 @@
 		<TournamentCombobox tournaments={data.tournaments} name="tournamentId" />
 	</label>
 
-	<div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
-		<fieldset style="flex:1; min-width:220px; border:1px solid var(--color-border); border-radius:6px;">
+	<div class="form-row" style="gap:1.5rem;">
+		<fieldset style="border:1px solid var(--color-border); border-radius:6px;">
 			<legend>You</legend>
 			<label>
 				Your team
@@ -80,7 +80,7 @@
 			/>
 		</fieldset>
 
-		<fieldset style="flex:1; min-width:220px; border:1px solid var(--color-border); border-radius:6px;">
+		<fieldset style="border:1px solid var(--color-border); border-radius:6px;">
 			<legend>Opponent</legend>
 			<label>
 				Opponent's team
@@ -131,32 +131,34 @@
 {#if data.matches.length === 0}
 	<p class="muted">No matches logged yet — add your first one above.</p>
 {:else}
-	<table>
-		<thead>
-			<tr>
-				<th>Date</th>
-				<th>You</th>
-				<th>Opponent</th>
-				<th>Result</th>
-				<th>Score</th>
-				<th>Tournament</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each data.matches as m (m.id)}
+	<div class="table-scroll">
+		<table>
+			<thead>
 				<tr>
-					<td>{formatDate(m.playedAt)}</td>
-					<td>{m.you.team} <span class="muted">({m.yourTotal} VP)</span></td>
-					<td
-						>{m.opponent.team} <span class="muted"
-							>({m.opponent.name}, {m.opponentTotal} VP)</span
-						></td
-					>
-					<td class="result-{m.result}">{m.result}</td>
-					<td>{m.yourTotal} - {m.opponentTotal}</td>
-					<td>{m.tournament ?? '—'}</td>
+					<th>Date</th>
+					<th>You</th>
+					<th>Opponent</th>
+					<th>Result</th>
+					<th>Score</th>
+					<th>Tournament</th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each data.matches as m (m.id)}
+					<tr>
+						<td>{formatDate(m.playedAt)}</td>
+						<td>{m.you.team} <span class="muted">({m.yourTotal} VP)</span></td>
+						<td
+							>{m.opponent.team} <span class="muted"
+								>({m.opponent.name}, {m.opponentTotal} VP)</span
+							></td
+						>
+						<td class="result-{m.result}">{m.result}</td>
+						<td>{m.yourTotal} - {m.opponentTotal}</td>
+						<td>{m.tournament ?? '—'}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
