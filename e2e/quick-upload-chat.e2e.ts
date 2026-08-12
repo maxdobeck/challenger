@@ -43,14 +43,21 @@ async function reviewAndConfirm(page: Page) {
 	await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 }
 
+// Opponent and both team fields are fuzzy-search comboboxes, not <select>s:
+// each renders a hidden input carrying the real form value alongside a text
+// input, so scope by the combobox wrapper that holds that hidden input
+// (unambiguous, unlike the overlapping "Opponent"/"team" legend/label text)
+// and pick the first match from its listbox.
+async function selectFirstComboboxOption(page: Page, fieldName: string) {
+	const combobox = page.locator('.combobox', { has: page.locator(`input[type="hidden"][name="${fieldName}"]`) });
+	await combobox.locator('input[type="text"]').click();
+	await combobox.locator('.combobox-option').first().click();
+}
+
 async function fillAndSubmitMatchForm(page: Page) {
-	// Opponent is a fuzzy-search combobox, not a <select>: open it by
-	// placeholder (unambiguous, unlike the overlapping "Opponent" legend/label
-	// text) and pick the first match from its listbox.
-	await page.getByPlaceholder('Search opponents…').click();
-	await page.locator('#opponentId-listbox [role="option"]').first().click();
-	await page.locator('select[name="player1TeamId"]').selectOption({ index: 1 });
-	await page.locator('select[name="player2TeamId"]').selectOption({ index: 1 });
+	await selectFirstComboboxOption(page, 'opponentId');
+	await selectFirstComboboxOption(page, 'player1TeamId');
+	await selectFirstComboboxOption(page, 'player2TeamId');
 	await page.getByRole('button', { name: 'Log match', exact: true }).click();
 	await expect(page).toHaveURL(/\/matches$/);
 }
