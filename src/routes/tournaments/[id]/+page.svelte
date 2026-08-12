@@ -53,34 +53,36 @@
 {#if data.matches.length === 0}
 	<p class="muted">No matches have been logged for this tournament.</p>
 {:else}
-	<table>
-		<thead>
-			<tr>
-				<th>Date</th>
-				<th>Player 1</th>
-				<th>Player 2</th>
-				<th>Score</th>
-				<th>Result</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each data.matches as m (m.id)}
+	<div class="table-scroll">
+		<table>
+			<thead>
 				<tr>
-					<td>{formatPlayedAt(m.playedAt)}</td>
-					<td>{m.player1Name} <span class="muted">({m.player1TeamName})</span></td>
-					<td>{m.player2Name} <span class="muted">({m.player2TeamName})</span></td>
-					<td>{m.player1Total} - {m.player2Total}</td>
-					<td>
-						{#if m.result === 'p1'}
-							{m.player1Name}
-						{:else if m.result === 'p2'}
-							{m.player2Name}
-						{:else}
-							Draw
-						{/if}
-					</td>
+					<th>Date</th>
+					<th>Player 1</th>
+					<th>Player 2</th>
+					<th>Score</th>
+					<th>Result</th>
 				</tr>
-			{/each}
-		</tbody>
-	</table>
+			</thead>
+			<tbody>
+				{#each data.matches as m (m.id)}
+					<tr>
+						<td>{formatPlayedAt(m.playedAt)}</td>
+						<td>{m.player1Name} <span class="muted">({m.player1TeamName})</span></td>
+						<td>{m.player2Name} <span class="muted">({m.player2TeamName})</span></td>
+						<td>{m.player1Total} - {m.player2Total}</td>
+						<td>
+							{#if m.result === 'p1'}
+								{m.player1Name}
+							{:else if m.result === 'p2'}
+								{m.player2Name}
+							{:else}
+								Draw
+							{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
 {/if}
