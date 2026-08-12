@@ -13,6 +13,11 @@ export type ScoreScanCopy = {
 	confirmMessage: string;
 	confirmButtonLabel: string;
 	startOverButtonLabel: string;
+	correctionInputPlaceholder: string;
+	feedbackPrompt: string;
+	feedbackPositiveAriaLabel: string;
+	feedbackNegativeAriaLabel: string;
+	feedbackThanksMessage: string;
 
 	// ScorePhotoScan.svelte (inline per-player flow, used on the main matches page)
 	photoScanFileInputLabel: string;
@@ -54,6 +59,11 @@ export const DEFAULT_SCORE_SCAN_COPY: ScoreScanCopy = {
 		'Your Primary score is {{primary}} (ceil({{primaryValue}} / 2)), for a total of {{total}}.',
 	confirmButtonLabel: 'Confirm',
 	startOverButtonLabel: 'Start over',
+	correctionInputPlaceholder: "Say what's wrong, e.g. \"kill should be 3\"",
+	feedbackPrompt: 'Did I get this right?',
+	feedbackPositiveAriaLabel: 'Yes, this looks right',
+	feedbackNegativeAriaLabel: 'No, this is wrong',
+	feedbackThanksMessage: 'Thanks for the feedback!',
 
 	photoScanFileInputLabel: 'Scan a scoreboard photo',
 	photoScanScanningLabel: 'Scanning…',

@@ -21,6 +21,9 @@
 	let tally = $state<Tally | null>(null);
 	let primaryChoice = $state<Category | null>(null);
 	let textValue = $state('');
+	let correctionText = $state('');
+	let resumptionToken = $state<string | null>(null);
+	let feedbackGiven = $state<'positive' | 'negative' | null>(null);
 
 	const derivedPrimary = $derived(
 		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
@@ -32,7 +35,12 @@
 	);
 	const copy = $derived(resolveScoreScanCopy($rawCopy));
 
-	async function submitScan(formData: FormData) {
+	// Shared by the initial scan and correction turns -- both post a FormData
+	// to /matches/scan and expect the same {crit_op, kill_op, tac_op,
+	// resumption_token} shape back. `onErrorStep` differs: a failed initial
+	// scan has no tally to fall back to (choose-input), a failed correction
+	// should keep whatever tally is already on screen (review-tally).
+	async function submitFormData(formData: FormData, onErrorStep: Step) {
 		step = 'scanning';
 		error = null;
 		try {
@@ -44,10 +52,42 @@
 
 			const result = await res.json();
 			tally = { crit: result.crit_op, kill: result.kill_op, tac: result.tac_op };
+			resumptionToken = result.resumption_token ?? null;
 			step = 'review-tally';
 		} catch (err) {
 			error = err instanceof Error ? err.message : copy.genericScanError;
-			step = 'choose-input';
+			step = onErrorStep;
+		}
+	}
+
+	async function submitScan(formData: FormData) {
+		await submitFormData(formData, 'choose-input');
+	}
+
+	async function submitCorrection() {
+		if (!correctionText.trim() || !tally) return;
+		const formData = new FormData();
+		formData.append('mode', 'correct');
+		formData.append('prior_crit', String(tally.crit));
+		formData.append('prior_kill', String(tally.kill));
+		formData.append('prior_tac', String(tally.tac));
+		formData.append('correction_text', correctionText.trim());
+		correctionText = '';
+		await submitFormData(formData, 'review-tally');
+	}
+
+	async function submitFeedback(kind: 'positive' | 'negative') {
+		if (feedbackGiven) return;
+		feedbackGiven = kind;
+		try {
+			await fetch('/matches/scan/feedback', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ resumption_token: resumptionToken, kind })
+			});
+		} catch {
+			// Best-effort -- feedbackGiven already reflects the user's action
+			// regardless of whether this reached the server.
 		}
 	}
 
@@ -108,6 +148,9 @@
 		tally = null;
 		primaryChoice = null;
 		textValue = '';
+		correctionText = '';
+		resumptionToken = null;
+		feedbackGiven = null;
 		error = null;
 	}
 </script>
@@ -161,6 +204,36 @@
 		<p class="muted">{copy.scanningLabel}</p>
 	{:else if step === 'review-tally' && tally}
 		<p>{interpolate(copy.reviewTallyMessage, { crit: tally.crit, kill: tally.kill, tac: tally.tac })}</p>
+		<form
+			class="chat-input-row"
+			onsubmit={(e) => {
+				e.preventDefault();
+				submitCorrection();
+			}}
+		>
+			<input
+				type="text"
+				placeholder={copy.correctionInputPlaceholder}
+				aria-label={copy.correctionInputPlaceholder}
+				bind:value={correctionText}
+			/>
+			<button
+				type="submit"
+				class="send-button"
+				aria-label={copy.sendButtonAriaLabel}
+				disabled={!correctionText.trim()}
+			>
+				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+					<path
+						d="M12 19V5M12 5L6 11M12 5l6 6"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
+		</form>
 		<p>{copy.reviewTallyPrompt}</p>
 		<div style="display:flex; gap:0.5rem;">
 			<button type="button" onclick={() => choosePrimary('crit')}>{copy.primaryCritLabel}</button>
@@ -175,6 +248,27 @@
 				total: tally.crit + tally.kill + tally.tac + derivedPrimary
 			})}
 		</p>
+		<div style="display:flex; gap:0.5rem; align-items:center;">
+			<span>{copy.feedbackPrompt}</span>
+			{#if feedbackGiven}
+				<span class="muted">{copy.feedbackThanksMessage}</span>
+			{:else}
+				<button
+					type="button"
+					aria-label={copy.feedbackPositiveAriaLabel}
+					onclick={() => submitFeedback('positive')}
+				>
+					👍
+				</button>
+				<button
+					type="button"
+					aria-label={copy.feedbackNegativeAriaLabel}
+					onclick={() => submitFeedback('negative')}
+				>
+					👎
+				</button>
+			{/if}
+		</div>
 		<div style="display:flex; gap:0.5rem;">
 			<button type="button" onclick={confirm}>{copy.confirmButtonLabel}</button>
 			<button type="button" class="button-secondary" onclick={startOver}>

@@ -1,4 +1,4 @@
-import { runScoreCompletion, type ScoreScanResult } from './shared';
+import { runScoreCompletion, type ScoreScanTurnResult } from './shared';
 import type { ServerLDUser, ServerLDProfile } from './context';
 
 export const SCORE_PHOTO_SCAN_CONFIG_KEY = 'score-photo-scan';
@@ -16,7 +16,7 @@ export async function scanScoreCard(
 	imageBlob: Blob,
 	user: ServerLDUser,
 	profile: ServerLDProfile
-): Promise<ScoreScanResult> {
+): Promise<ScoreScanTurnResult> {
 	const imageBase64 = Buffer.from(await imageBlob.arrayBuffer()).toString('base64');
 	return runScoreCompletion(
 		SCORE_PHOTO_SCAN_CONFIG_KEY,
