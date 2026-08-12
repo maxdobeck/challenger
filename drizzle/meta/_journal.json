@@ -29,6 +29,13 @@
       "when": 1786372835770,
       "tag": "0003_high_mercury",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786505001301,
+      "tag": "0004_lovely_deathstrike",
+      "breakpoints": true
     }
   ]
 }
