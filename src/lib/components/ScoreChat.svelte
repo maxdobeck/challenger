@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { downscaleImageForUpload } from '$lib/imageDownscale';
+
 	type Category = 'crit' | 'kill' | 'tac';
 	type Tally = { crit: number; kill: number; tac: number };
 	type ScoreResult = { crit: number; kill: number; tac: number; primary: number; primaryOpChoice: Category };
@@ -48,26 +50,10 @@
 		if (!file) return;
 
 		try {
-			let bitmap: ImageBitmap;
-			try {
-				bitmap = await createImageBitmap(file);
-			} catch {
-				throw new Error("Couldn't read that image — try a PNG or JPEG screenshot instead.");
-			}
-			const canvas = document.createElement('canvas');
-			canvas.width = bitmap.width;
-			canvas.height = bitmap.height;
-			const ctx = canvas.getContext('2d');
-			if (!ctx) throw new Error('Canvas is not supported in this browser.');
-			ctx.drawImage(bitmap, 0, 0);
-
-			const blob = await new Promise<Blob | null>((resolve) =>
-				canvas.toBlob(resolve, 'image/png')
-			);
-			if (!blob) throw new Error('Could not encode the photo.');
+			const blob = await downscaleImageForUpload(file);
 
 			const formData = new FormData();
-			formData.append('image', blob, 'score-tracker.png');
+			formData.append('image', blob, 'score-tracker.jpg');
 			await submitScan(formData);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Could not read that photo.';

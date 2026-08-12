@@ -3,6 +3,23 @@ import type { ServerLDUser, ServerLDProfile } from './context';
 
 export const SCORE_PHOTO_SCAN_CONFIG_KEY = 'score-photo-scan';
 
+type SupportedMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+const SUPPORTED_MEDIA_TYPES: readonly SupportedMediaType[] = [
+	'image/jpeg',
+	'image/png',
+	'image/gif',
+	'image/webp'
+];
+
+// The client always sends image/jpeg post-downscale (see $lib/imageDownscale);
+// fall back to it for any missing/unrecognized type (e.g. a direct API
+// bypass) rather than mislabeling arbitrary bytes as PNG.
+function resolveMediaType(blob: Blob): SupportedMediaType {
+	return SUPPORTED_MEDIA_TYPES.includes(blob.type as SupportedMediaType)
+		? (blob.type as SupportedMediaType)
+		: 'image/jpeg';
+}
+
 // claude-haiku-4-5: cheap/fast, proven sufficient for this structured
 // extraction task by the original direct-Anthropic implementation (97b44e9).
 const DEFAULT_MODEL = 'claude-haiku-4-5';
@@ -25,7 +42,7 @@ export async function scanScoreCard(
 		[
 			{
 				type: 'image',
-				source: { type: 'base64', media_type: 'image/png', data: imageBase64 }
+				source: { type: 'base64', media_type: resolveMediaType(imageBlob), data: imageBase64 }
 			},
 			{ type: 'text', text: 'Read the score tracker card in this photo.' }
 		],
