@@ -1,7 +1,14 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { eq } from 'drizzle-orm';
 import { loginAsMax } from './helpers';
 import { scoreScanFixtures } from './fixtures/score-scan-fixtures';
 import { sampleScoreTrackerImageBuffer } from './fixtures/sample-score-tracker';
+import * as schema from '../src/lib/server/db/schema';
+
+const SEED_PASSWORD = 'password123';
+const TEST1_EMAIL = 'test1@challenger.example.com';
 
 // Reuses the same "confirmed-scoreboard" fixture as the existing scan test
 // (CRIT 5, KILL 2, TAC 4) so both suites exercise the same known-good values.
@@ -106,13 +113,19 @@ test('type score in natural language -> pick primary -> confirm math -> log matc
 	await fillAndSubmitMatchForm(page);
 });
 
-test('shows a friendly message once the daily scan cap is hit', async ({ page }) => {
+test('shows a friendly message once the daily scan cap is hit (demo-mode cookie)', async ({ page }) => {
+	// Demo mode's cookie throttle (src/lib/server/scanThrottleCookie.ts) is what
+	// this simulates -- real-DB mode ignores this cookie entirely and checks the
+	// scanEvent table instead (see the sibling test below), so this only applies
+	// when DEMO_MODE is set.
+	test.skip(process.env.DEMO_MODE !== 'true', 'exercises the demo-mode cookie throttle specifically');
+
 	await loginAsMax(page);
 	await page.goto('/matches/quick-upload');
 
 	// Simulates having already hit today's cap via the real cookie the
-	// endpoint reads (src/lib/server/scanThrottleCookie.ts) -- no need to mock
-	// /matches/scan here, since the throttle check rejects before any AI call.
+	// endpoint reads -- no need to mock /matches/scan here, since the throttle
+	// check rejects before any AI call.
 	await page.context().addCookies([
 		{
 			name: 'scan_count',
@@ -131,4 +144,51 @@ test('shows a friendly message once the daily scan cap is hit', async ({ page })
 	await expect(page.getByText("You've hit today's scan limit — enter these scores manually.")).toBeVisible({
 		timeout: 15000
 	});
+});
+
+test('shows a friendly message once the daily scan cap is hit (real-DB scanEvent)', async ({ page }) => {
+	// Mirror of the test above for real-DB mode, where the throttle is a query
+	// against scanEvent (src/lib/server/scanThrottle.ts) rather than a cookie.
+	// Uses test1 rather than Max -- every other test in this file logs in as
+	// Max, and seeding 20 scanEvent rows for that account would throttle every
+	// scan attempt those tests make against a shared real Postgres instance.
+	test.skip(process.env.DEMO_MODE === 'true', 'exercises the real-DB scanEvent throttle specifically');
+
+	const DATABASE_URL = process.env.DATABASE_URL;
+	if (!DATABASE_URL) {
+		throw new Error('DATABASE_URL is not set (copy .env.example to .env and fill it in; Playwright loads .env automatically)');
+	}
+	const client = postgres(DATABASE_URL);
+	const db = drizzle(client, { schema });
+
+	const testUser = await db.query.user.findFirst({ where: (u, { eq }) => eq(u.email, TEST1_EMAIL) });
+	if (!testUser) throw new Error(`Seeded user ${TEST1_EMAIL} not found`);
+
+	await db.insert(schema.scanEvent).values(
+		Array.from({ length: 20 }, () => ({ userId: testUser.id }))
+	);
+
+	try {
+		await page.goto('/login');
+		await page.getByLabel('Email').fill(TEST1_EMAIL);
+		await page.getByLabel('Password', { exact: true }).fill(SEED_PASSWORD);
+		await page.getByRole('button', { name: 'Login', exact: true }).click();
+		await expect(page).toHaveURL(/\/leaderboard/);
+
+		await page.goto('/matches/quick-upload');
+		await page.waitForLoadState('networkidle');
+		await page.getByLabel('Upload Photo', { exact: true }).setInputFiles({
+			name: 'score-tracker.png',
+			mimeType: 'image/png',
+			buffer: sampleScoreTrackerImageBuffer()
+		});
+
+		await expect(
+			page.getByText("You've hit today's scan limit — enter these scores manually.")
+		).toBeVisible({ timeout: 15000 });
+	} finally {
+		// Leaves test1 clean for any other test/run that logs in as that account.
+		await db.delete(schema.scanEvent).where(eq(schema.scanEvent.userId, testUser.id));
+		await client.end();
+	}
 });
