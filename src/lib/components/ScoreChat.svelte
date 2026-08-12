@@ -17,6 +17,10 @@
 		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
 	);
 
+	const isMobile = $derived(
+		typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+	);
+
 	async function submitScan(formData: FormData) {
 		step = 'scanning';
 		error = null;
@@ -105,10 +109,12 @@
 				Upload Photo
 				<input type="file" accept="image/*" onchange={handleFileChange} />
 			</label>
-			<label>
-				Take Picture
-				<input type="file" accept="image/*" capture="environment" onchange={handleFileChange} />
-			</label>
+			{#if isMobile}
+				<label>
+					Take Picture
+					<input type="file" accept="image/*" capture="environment" onchange={handleFileChange} />
+				</label>
+			{/if}
 		</div>
 		<button type="button" class="button-secondary" onclick={() => (step = 'text-entry')}>
 			Type your score instead
@@ -152,3 +158,16 @@
 		<p class="error">{error}</p>
 	{/if}
 </div>
+
+<style>
+	label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		max-width: 100%;
+	}
+
+	input[type='file'] {
+		max-width: 100%;
+	}
+</style>
