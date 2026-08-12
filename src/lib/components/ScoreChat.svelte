@@ -105,10 +105,12 @@
 	{#if step === 'choose-input'}
 		<p>How do you want to log your score?</p>
 		<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-			<label>
-				Upload Photo
-				<input type="file" accept="image/*" onchange={handleFileChange} />
-			</label>
+			{#if !isMobile}
+				<label>
+					Upload Photo
+					<input type="file" accept="image/*" onchange={handleFileChange} />
+				</label>
+			{/if}
 			{#if isMobile}
 				<label>
 					Take Picture
