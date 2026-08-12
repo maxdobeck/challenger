@@ -84,20 +84,49 @@ test('upload photo -> pick primary -> confirm math -> log match', async ({ page 
 // attribute only changes which native picker a real mobile browser opens, not
 // the file input's behavior, so this exists to document that both entry
 // points reach the same working flow rather than to catch a distinct bug.
-test('take picture -> pick primary -> confirm math -> log match', async ({ page }) => {
-	await loginAsMax(page);
-	await page.goto('/matches/quick-upload');
-	await mockScanResponse(page);
+test.describe('on a mobile browser', () => {
+	// ScoreChat.svelte only renders the "Take Picture" entry point on mobile
+	// user agents, so this needs one to exercise that path at all.
+	test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36' });
 
-	await page.waitForLoadState('networkidle');
-	await page.getByLabel('Take Picture', { exact: true }).setInputFiles({
-		name: 'score-tracker.png',
-		mimeType: 'image/png',
-		buffer: sampleScoreTrackerImageBuffer()
+	test('take picture -> pick primary -> confirm math -> log match', async ({ page }) => {
+		await loginAsMax(page);
+		await page.goto('/matches/quick-upload');
+		await mockScanResponse(page);
+
+		await page.waitForLoadState('networkidle');
+		await page.getByLabel('Take Picture', { exact: true }).setInputFiles({
+			name: 'score-tracker.png',
+			mimeType: 'image/png',
+			buffer: sampleScoreTrackerImageBuffer()
+		});
+
+		await reviewAndConfirm(page);
+		await fillAndSubmitMatchForm(page);
 	});
+});
 
-	await reviewAndConfirm(page);
-	await fillAndSubmitMatchForm(page);
+test.describe('at a mobile viewport width', () => {
+	// Playwright's `devices` presets (e.g. devices['iPhone 13']) bundle a
+	// shrunk viewport with touch support and a mobile user agent; this only
+	// needs the viewport shrink to catch layout overflow, so it sets that
+	// alone rather than pulling in a full device profile.
+	test.use({ viewport: { width: 375, height: 812 } });
+
+	test('quick upload page loads and the Upload Photo control stays in view', async ({ page }) => {
+		await loginAsMax(page);
+		await page.goto('/matches/quick-upload');
+
+		await expect(page.getByRole('heading', { name: 'Quick Upload' })).toBeVisible();
+
+		const uploadControl = page.getByLabel('Upload Photo', { exact: true });
+		await expect(uploadControl).toBeVisible();
+
+		const box = await uploadControl.boundingBox();
+		expect(box).not.toBeNull();
+		expect(box!.x).toBeGreaterThanOrEqual(0);
+		expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+	});
 });
 
 test('type score in natural language -> pick primary -> confirm math -> log match', async ({ page }) => {
