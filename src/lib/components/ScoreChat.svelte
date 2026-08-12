@@ -185,6 +185,12 @@
 		max-width: 100%;
 	}
 
+	input[type='file']::file-selector-button:hover,
+	input[type='file']::-webkit-file-upload-button:hover {
+		background: #800080;
+		color: #fff;
+	}
+
 	.chat-input-row {
 		display: flex;
 		align-items: center;
