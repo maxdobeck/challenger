@@ -39,12 +39,12 @@ function isPlausibleScoreResult(value: unknown): value is ScoreScanResult {
 }
 
 // Shared by the vision (photo) and text (natural-language) score-parsing
-// paths: both resolve a completion-mode AI Config for `aiConfigKey`, then --
+// paths: both resolve an agent-mode AI Config for `aiConfigKey`, then --
 // only if ANTHROPIC_API_KEY is actually set -- call the real model with the
-// resolved (or default) model/prompt. Without a key, the model call itself is
-// mocked, but the LD Config evaluation and tracking above it still run for
-// real whenever LaunchDarkly is configured. This is the "real if configured,
-// mocked otherwise" seam used throughout this feature (see also
+// resolved (or default) model/instructions. Without a key, the model call
+// itself is mocked, but the LD Config evaluation and tracking above it still
+// run for real whenever LaunchDarkly is configured. This is the "real if
+// configured, mocked otherwise" seam used throughout this feature (see also
 // src/lib/server/demo/kv.ts and src/lib/server/scanThrottle.ts).
 export async function runScoreCompletion(
 	aiConfigKey: string,
@@ -57,9 +57,10 @@ export async function runScoreCompletion(
 	const context = buildServerContext(user, profile);
 	const aiClient = await getAiClient();
 	const aiConfig = aiClient
-		? await aiClient.completionConfig(aiConfigKey, context, {
+		? await aiClient.agentConfig(aiConfigKey, context, {
+				enabled: true,
 				model: { name: defaultModel },
-				messages: [{ role: 'system', content: defaultPrompt }]
+				instructions: defaultPrompt
 			})
 		: null;
 	const tracker = aiConfig?.createTracker();
@@ -70,7 +71,7 @@ export async function runScoreCompletion(
 	}
 
 	const modelName = aiConfig?.model?.name ?? defaultModel;
-	const systemPrompt = aiConfig?.messages?.[0]?.content ?? defaultPrompt;
+	const systemPrompt = aiConfig?.instructions ?? defaultPrompt;
 
 	try {
 		const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
