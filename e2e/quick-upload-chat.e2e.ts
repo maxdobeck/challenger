@@ -58,6 +58,7 @@ async function fillAndSubmitMatchForm(page: Page) {
 	await selectFirstComboboxOption(page, 'opponentId');
 	await selectFirstComboboxOption(page, 'player1TeamId');
 	await selectFirstComboboxOption(page, 'player2TeamId');
+	await page.locator('select[name="player2PrimaryOpChoice"]').selectOption('crit');
 	await page.getByRole('button', { name: 'Log match', exact: true }).click();
 	await expect(page).toHaveURL(/\/matches$/);
 }
