@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import ScorePhotoScan from '$lib/components/ScorePhotoScan.svelte';
-	import TournamentCombobox from '$lib/components/TournamentCombobox.svelte';
 	import type { ActionData, PageServerData } from './$types';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -28,16 +28,11 @@
 <form class="stack card" method="post" action="?/logMatch" use:enhance>
 	<label>
 		Opponent
-		<select name="opponentId" required>
-			<option value="" disabled selected>Select an opponent</option>
-			{#each data.opponents as o (o.id)}
-				<option value={o.id}>{o.name}</option>
-			{/each}
-		</select>
+		<Combobox items={data.opponents} name="opponentId" placeholder="Search opponents…" required />
 	</label>
 	<label>
 		Tournament <span class="muted">(optional)</span>
-		<TournamentCombobox tournaments={data.tournaments} name="tournamentId" />
+		<Combobox items={data.tournaments} name="tournamentId" placeholder="Search tournaments…" />
 	</label>
 
 	<div class="form-row" style="gap:1.5rem;">

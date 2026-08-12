@@ -44,11 +44,11 @@ async function reviewAndConfirm(page: Page) {
 }
 
 async function fillAndSubmitMatchForm(page: Page) {
-	// Attribute selectors rather than getByLabel: the "You"/"Opponent"
-	// fieldsets both have a legend whose text overlaps with sibling labels
-	// (e.g. the "Opponent" legend vs. the "Opponent" select's own label),
-	// which makes accessible-name matching ambiguous.
-	await page.locator('select[name="opponentId"]').selectOption({ index: 1 });
+	// Opponent is a fuzzy-search combobox, not a <select>: open it by
+	// placeholder (unambiguous, unlike the overlapping "Opponent" legend/label
+	// text) and pick the first match from its listbox.
+	await page.getByPlaceholder('Search opponents…').click();
+	await page.locator('#opponentId-listbox [role="option"]').first().click();
 	await page.locator('select[name="player1TeamId"]').selectOption({ index: 1 });
 	await page.locator('select[name="player2TeamId"]').selectOption({ index: 1 });
 	await page.getByRole('button', { name: 'Log match', exact: true }).click();
