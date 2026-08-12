@@ -93,5 +93,3 @@ jobs:
       - run: npm run db:migrate
       - run: npm run db:seed
       - run: npm run test:e2e
-        env:
-          SKIP_TRAFFIC_TESTS: true
