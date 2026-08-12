@@ -9,7 +9,17 @@ import { isThrottledByCookie, recordScanInCookie } from '$lib/server/scanThrottl
 import { getUserProfile, DEFAULT_PROFILE } from '$lib/server/users';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// Anthropic's Vision API hard-caps images at 5MB *base64-encoded*, and
+// base64 inflates raw bytes by 4/3 -- so raw bytes must stay under
+// ~3.75MiB (5MB * 3/4) to have any chance of reaching the model at all.
+// 3MiB leaves ~1MiB/20% headroom under that ceiling, while still being
+// 3-10x larger than a legitimately downscaled upload ($lib/imageDownscale
+// targets ~1568px long edge / JPEG q0.85, typically a few hundred KB) --
+// this should now only ever fire for a client bypass, not real traffic,
+// and fails fast with a clear message instead of a confusing 502 from
+// Anthropic itself.
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 // Records the attempt against the daily cap regardless of outcome -- a failed
 // scan still cost a model call (or would have, once real keys are set), so
