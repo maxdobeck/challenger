@@ -4,6 +4,7 @@ import { getAiClient } from './ldClient';
 import { buildServerContext, type ServerLDUser, type ServerLDProfile } from './context';
 
 export type ScoreScanResult = { crit: number; kill: number; tac: number };
+export type ScoreScanOutcome = { result: ScoreScanResult; resumptionToken: string | null };
 
 function mockScoreResult(): ScoreScanResult {
 	const roll = () => Math.floor(Math.random() * 7);
@@ -53,7 +54,7 @@ export async function runScoreCompletion(
 	userContent: Anthropic.Messages.MessageParam['content'],
 	user: ServerLDUser,
 	profile: ServerLDProfile
-): Promise<ScoreScanResult> {
+): Promise<ScoreScanOutcome> {
 	const context = buildServerContext(user, profile);
 	const aiClient = await getAiClient();
 	const aiConfig = aiClient
@@ -63,10 +64,11 @@ export async function runScoreCompletion(
 			})
 		: null;
 	const tracker = aiConfig?.createTracker();
+	const resumptionToken = tracker?.resumptionToken ?? null;
 
 	if (!env.ANTHROPIC_API_KEY) {
 		tracker?.trackSuccess();
-		return mockScoreResult();
+		return { result: mockScoreResult(), resumptionToken };
 	}
 
 	const modelName = aiConfig?.model?.name ?? defaultModel;
@@ -97,7 +99,7 @@ export async function runScoreCompletion(
 		}
 
 		tracker?.trackSuccess();
-		return parsed;
+		return { result: parsed, resumptionToken };
 	} catch (err) {
 		tracker?.trackError();
 		throw err;

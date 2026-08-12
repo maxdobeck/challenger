@@ -7,11 +7,20 @@
 
 	type Step = 'choose-input' | 'scanning' | 'review-tally' | 'confirm';
 
+	type FeedbackState = 'idle' | 'negative-pending' | 'sent';
+
 	let step = $state<Step>('choose-input');
 	let error = $state<string | null>(null);
 	let tally = $state<Tally | null>(null);
 	let primaryChoice = $state<Category | null>(null);
 	let textValue = $state('');
+
+	let scanEventId = $state<number | null>(null);
+	let aiConfigKey = $state<string | null>(null);
+	let feedback = $state<FeedbackState>('idle');
+	let feedbackComment = $state('');
+	let correction = $state<Tally | null>(null);
+	let feedbackError = $state<string | null>(null);
 
 	const derivedPrimary = $derived(
 		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
@@ -29,10 +38,46 @@
 
 			const result = await res.json();
 			tally = { crit: result.crit_op, kill: result.kill_op, tac: result.tac_op };
+			scanEventId = result.scan_event_id ?? null;
+			aiConfigKey = result.ai_config_key ?? null;
+			feedback = 'idle';
+			feedbackComment = '';
+			correction = null;
+			feedbackError = null;
 			step = 'review-tally';
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Scan failed.';
 			step = 'choose-input';
+		}
+	}
+
+	function beginNegativeFeedback() {
+		if (!tally) return;
+		correction = { ...tally };
+		feedback = 'negative-pending';
+	}
+
+	async function sendFeedback(kind: 'positive' | 'negative') {
+		if (!aiConfigKey) return;
+		feedbackError = null;
+		try {
+			const res = await fetch('/matches/scan/feedback', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					scanEventId,
+					aiConfigKey,
+					kind,
+					comment: kind === 'negative' ? feedbackComment.trim() || undefined : undefined,
+					correctedCrit: kind === 'negative' ? correction?.crit : undefined,
+					correctedKill: kind === 'negative' ? correction?.kill : undefined,
+					correctedTac: kind === 'negative' ? correction?.tac : undefined
+				})
+			});
+			if (!res.ok) throw new Error(`Feedback failed (${res.status}).`);
+			feedback = 'sent';
+		} catch {
+			feedbackError = "Couldn't send feedback — try again.";
 		}
 	}
 
@@ -94,6 +139,12 @@
 		primaryChoice = null;
 		textValue = '';
 		error = null;
+		scanEventId = null;
+		aiConfigKey = null;
+		feedback = 'idle';
+		feedbackComment = '';
+		correction = null;
+		feedbackError = null;
 	}
 </script>
 
@@ -140,7 +191,67 @@
 	{:else if step === 'scanning'}
 		<p class="muted">Reading your score…</p>
 	{:else if step === 'review-tally' && tally}
-		<p>Here's what I read: CRIT {tally.crit}, KILL {tally.kill}, TAC {tally.tac}.</p>
+		<div class="ai-response-row">
+			<p>Here's what I read: CRIT {tally.crit}, KILL {tally.kill}, TAC {tally.tac}.</p>
+			{#if aiConfigKey && feedback !== 'sent'}
+				<div class="feedback-buttons" role="group" aria-label="Rate this reading">
+					<button
+						type="button"
+						class="feedback-button"
+						aria-label="Thumbs up"
+						disabled={feedback === 'negative-pending'}
+						onclick={() => sendFeedback('positive')}
+					>
+						👍
+					</button>
+					<button
+						type="button"
+						class="feedback-button"
+						aria-label="Thumbs down"
+						disabled={feedback === 'negative-pending'}
+						onclick={beginNegativeFeedback}
+					>
+						👎
+					</button>
+				</div>
+			{:else if feedback === 'sent'}
+				<span class="muted feedback-thanks">Thanks for the feedback!</span>
+			{/if}
+		</div>
+
+		{#if feedback === 'negative-pending' && correction}
+			<div class="feedback-correction card">
+				<p class="muted">What should it have read?</p>
+				<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+					<label style="flex:1;">
+						Crit (0-6)
+						<input type="number" min="0" max="6" bind:value={correction.crit} />
+					</label>
+					<label style="flex:1;">
+						Kill (0-6)
+						<input type="number" min="0" max="6" bind:value={correction.kill} />
+					</label>
+					<label style="flex:1;">
+						Tac (0-6)
+						<input type="number" min="0" max="6" bind:value={correction.tac} />
+					</label>
+				</div>
+				<label>
+					Anything else? (optional)
+					<textarea
+						rows="2"
+						placeholder="e.g. &quot;no, that's the wrong score&quot;"
+						bind:value={feedbackComment}
+					></textarea>
+				</label>
+				<button type="button" onclick={() => sendFeedback('negative')}>Submit feedback</button>
+			</div>
+		{/if}
+
+		{#if feedbackError}
+			<p class="error">{feedbackError}</p>
+		{/if}
+
 		<p>Which op is your Primary?</p>
 		<div style="display:flex; gap:0.5rem;">
 			<button type="button" onclick={() => choosePrimary('crit')}>Crit</button>
@@ -214,5 +325,52 @@
 	.send-button:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	.ai-response-row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.feedback-buttons {
+		display: flex;
+		gap: 0.25rem;
+		flex-shrink: 0;
+	}
+
+	.feedback-button {
+		background: none;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		padding: 0.15rem 0.4rem;
+		cursor: pointer;
+		line-height: 1;
+	}
+
+	.feedback-button:hover:not(:disabled) {
+		border-color: var(--color-accent);
+	}
+
+	.feedback-button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.feedback-thanks {
+		font-size: 0.9rem;
+	}
+
+	.feedback-correction {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.feedback-correction textarea {
+		width: 100%;
+		resize: vertical;
 	}
 </style>

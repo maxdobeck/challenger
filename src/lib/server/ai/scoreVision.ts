@@ -1,12 +1,14 @@
-import { runScoreCompletion, type ScoreScanResult } from './shared';
+import { runScoreCompletion, type ScoreScanOutcome } from './shared';
 import type { ServerLDUser, ServerLDProfile } from './context';
 
 export const SCORE_PHOTO_SCAN_CONFIG_KEY = 'score-photo-scan';
 
 // claude-haiku-4-5: cheap/fast, proven sufficient for this structured
 // extraction task by the original direct-Anthropic implementation (97b44e9).
-const DEFAULT_MODEL = 'claude-haiku-4-5';
-const DEFAULT_PROMPT =
+// Exported so $lib/server/ai/feedback.ts can resolve the same AI Config
+// (same defaults) when reconstructing a tracker without a resumption token.
+export const DEFAULT_MODEL = 'claude-haiku-4-5';
+export const DEFAULT_PROMPT =
 	'You are reading a Kill Team turn-tracker card from a photo. The card has five magnets ' +
 	'sliding along labeled scales: KILL OP, CRIT OP, TAC OP, CP, and Turning Point. Read the ' +
 	'magnet position on each scale and report CRIT OP, KILL OP, and TAC OP as integers 0-6. ' +
@@ -16,7 +18,7 @@ export async function scanScoreCard(
 	imageBlob: Blob,
 	user: ServerLDUser,
 	profile: ServerLDProfile
-): Promise<ScoreScanResult> {
+): Promise<ScoreScanOutcome> {
 	const imageBase64 = Buffer.from(await imageBlob.arrayBuffer()).toString('base64');
 	return runScoreCompletion(
 		SCORE_PHOTO_SCAN_CONFIG_KEY,

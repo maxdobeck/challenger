@@ -1,8 +1,8 @@
 import { error, json, type Cookies } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
-import { scanScoreCard } from '$lib/server/ai/scoreVision';
-import { parseScoreText } from '$lib/server/ai/scoreTextParse';
+import { scanScoreCard, SCORE_PHOTO_SCAN_CONFIG_KEY } from '$lib/server/ai/scoreVision';
+import { parseScoreText, SCORE_TEXT_PARSE_CONFIG_KEY } from '$lib/server/ai/scoreTextParse';
 import type { ScoreScanResult } from '$lib/server/ai/shared';
 import { isThrottled, recordScanEvent } from '$lib/server/scanThrottle';
 import { isThrottledByCookie, recordScanInCookie } from '$lib/server/scanThrottleCookie';
@@ -14,13 +14,19 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 // Records the attempt against the daily cap regardless of outcome -- a failed
 // scan still cost a model call (or would have, once real keys are set), so
 // letting failures go uncounted would let someone dodge the limit by forcing
-// errors.
-async function recordAttempt(userId: string, cookies: Cookies): Promise<void> {
+// errors. Returns the scan_event row id in real-DB mode (null in demo mode, and
+// on the error path where there's no resumption token to store) so the client
+// can reference this exact scan when submitting feedback.
+async function recordAttempt(
+	userId: string,
+	cookies: Cookies,
+	resumptionToken: string | null
+): Promise<number | null> {
 	if (DEMO_MODE) {
 		recordScanInCookie(cookies);
-	} else {
-		await recordScanEvent(userId);
+		return null;
 	}
+	return await recordScanEvent(userId, resumptionToken);
 }
 
 export const POST: RequestHandler = async (event) => {
@@ -47,18 +53,28 @@ export const POST: RequestHandler = async (event) => {
 
 	const profile = DEMO_MODE ? DEFAULT_PROFILE : await getUserProfile(user.id);
 	const ldUser = { id: user.id, name: user.name, email: user.email };
+	const aiConfigKey = hasImage ? SCORE_PHOTO_SCAN_CONFIG_KEY : SCORE_TEXT_PARSE_CONFIG_KEY;
 
 	let result: ScoreScanResult;
+	let resumptionToken: string | null;
 	try {
-		result = hasImage
+		const outcome = hasImage
 			? await scanScoreCard(image as Blob, ldUser, profile)
 			: await parseScoreText(text!, ldUser, profile);
+		result = outcome.result;
+		resumptionToken = outcome.resumptionToken;
 	} catch (err) {
-		await recordAttempt(user.id, event.cookies);
+		await recordAttempt(user.id, event.cookies, null);
 		console.error('Score scan failed', err);
 		error(502, 'Could not read that. Try again or enter scores manually.');
 	}
 
-	await recordAttempt(user.id, event.cookies);
-	return json({ crit_op: result.crit, kill_op: result.kill, tac_op: result.tac });
+	const scanEventId = await recordAttempt(user.id, event.cookies, resumptionToken);
+	return json({
+		crit_op: result.crit,
+		kill_op: result.kill,
+		tac_op: result.tac,
+		scan_event_id: scanEventId,
+		ai_config_key: aiConfigKey
+	});
 };

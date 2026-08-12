@@ -30,3 +30,15 @@ export async function getAiClient(): Promise<LDAIClient | null> {
 	if (!aiClient) aiClient = initAi(ldClient);
 	return aiClient;
 }
+
+// Fires a custom LD metric event (the base client's track(), not the AI-config
+// tracker) -- a no-op when LaunchDarkly isn't configured. Used for data the
+// AI-tracker API has no field for, e.g. a human's corrected score values.
+export async function trackEvent(
+	key: string,
+	context: LaunchDarkly.LDContext,
+	data?: unknown
+): Promise<void> {
+	const client = await getLdClient();
+	client?.track(key, context, data);
+}

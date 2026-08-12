@@ -85,6 +85,28 @@ export const scanEvent = pgTable('scan_event', {
 	userId: text('user_id')
 		.notNull()
 		.references(() => user.id, { onDelete: 'cascade' }),
+	// LD AI Config tracker resumption token for the completion this scan produced --
+	// lets a later feedback request reconstruct the same tracker (same runId) so
+	// trackFeedback() correlates with the original generation instead of a new one.
+	resumptionToken: text('resumption_token'),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+// One row per thumbs up/down on a score reading. scanEventId is nullable because demo
+// mode has no scan_event row to reference (see scanEvent's comment above); the feedback
+// signal still reaches LaunchDarkly in that case, it just isn't durably attributable here.
+export const scanFeedback = pgTable('scan_feedback', {
+	id: serial('id').primaryKey(),
+	scanEventId: integer('scan_event_id').references(() => scanEvent.id, { onDelete: 'set null' }),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	aiConfigKey: text('ai_config_key').notNull(),
+	kind: text('kind', { enum: ['positive', 'negative'] }).notNull(),
+	comment: text('comment'),
+	correctedCrit: integer('corrected_crit'),
+	correctedKill: integer('corrected_kill'),
+	correctedTac: integer('corrected_tac'),
 	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 

@@ -9,9 +9,17 @@
 		onApply: (scores: ScoreDraft) => void;
 	} = $props();
 
+	type FeedbackState = 'idle' | 'negative-pending' | 'sent';
+
 	let scanning = $state(false);
 	let error = $state<string | null>(null);
 	let draft = $state<ScoreDraft | null>(null);
+
+	let scanEventId = $state<number | null>(null);
+	let aiConfigKey = $state<string | null>(null);
+	let feedback = $state<FeedbackState>('idle');
+	let feedbackComment = $state('');
+	let feedbackError = $state<string | null>(null);
 
 	async function handleFileChange(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
@@ -50,6 +58,11 @@
 
 			const result = await res.json();
 			draft = { crit: result.crit_op, kill: result.kill_op, tac: result.tac_op };
+			scanEventId = result.scan_event_id ?? null;
+			aiConfigKey = result.ai_config_key ?? null;
+			feedback = 'idle';
+			feedbackComment = '';
+			feedbackError = null;
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Scan failed.';
 		} finally {
@@ -61,6 +74,30 @@
 		if (!draft) return;
 		onApply(draft);
 		draft = null;
+	}
+
+	async function sendFeedback(kind: 'positive' | 'negative') {
+		if (!aiConfigKey || !draft) return;
+		feedbackError = null;
+		try {
+			const res = await fetch('/matches/scan/feedback', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					scanEventId,
+					aiConfigKey,
+					kind,
+					comment: kind === 'negative' ? feedbackComment.trim() || undefined : undefined,
+					correctedCrit: draft.crit,
+					correctedKill: draft.kill,
+					correctedTac: draft.tac
+				})
+			});
+			if (!res.ok) throw new Error(`Feedback failed (${res.status}).`);
+			feedback = 'sent';
+		} catch {
+			feedbackError = "Couldn't send feedback — try again.";
+		}
 	}
 </script>
 
@@ -97,6 +134,73 @@
 			<button type="button" class="button-secondary" onclick={apply}>
 				Apply to {groupName}'s scores
 			</button>
+
+			{#if aiConfigKey && feedback !== 'sent'}
+				<div class="feedback-row">
+					<span class="muted">Rate this reading:</span>
+					<div class="feedback-buttons" role="group" aria-label="Rate this reading">
+						<button
+							type="button"
+							class="feedback-button"
+							aria-label="Thumbs up"
+							onclick={() => sendFeedback('positive')}
+						>
+							👍
+						</button>
+						<button
+							type="button"
+							class="feedback-button"
+							aria-label="Thumbs down"
+							onclick={() => (feedback = 'negative-pending')}
+						>
+							👎
+						</button>
+					</div>
+				</div>
+				{#if feedback === 'negative-pending'}
+					<label>
+						What was wrong? (optional)
+						<textarea
+							rows="2"
+							placeholder="e.g. &quot;no, that's the wrong score&quot;"
+							bind:value={feedbackComment}
+						></textarea>
+					</label>
+					<button type="button" onclick={() => sendFeedback('negative')}>Submit feedback</button>
+				{/if}
+			{:else if feedback === 'sent'}
+				<span class="muted">Thanks for the feedback!</span>
+			{/if}
+
+			{#if feedbackError}
+				<p class="error">{feedbackError}</p>
+			{/if}
 		</div>
 	{/if}
 </div>
+
+<style>
+	.feedback-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.feedback-buttons {
+		display: flex;
+		gap: 0.25rem;
+	}
+
+	.feedback-button {
+		background: none;
+		border: 1px solid transparent;
+		border-radius: 999px;
+		padding: 0.15rem 0.4rem;
+		cursor: pointer;
+		line-height: 1;
+	}
+
+	.feedback-button:hover {
+		border-color: var(--color-accent);
+	}
+</style>
