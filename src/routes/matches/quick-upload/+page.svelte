@@ -54,12 +54,7 @@
 			<legend>You</legend>
 			<label>
 				Your team
-				<select name="player1TeamId" required>
-					<option value="" disabled selected>Select a team</option>
-					{#each data.teams as t (t.id)}
-						<option value={t.id}>{t.name}</option>
-					{/each}
-				</select>
+				<Combobox items={data.teams} name="player1TeamId" placeholder="Search teams…" required />
 			</label>
 			<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 				<label style="flex:1;">
@@ -86,12 +81,7 @@
 			<legend>Opponent</legend>
 			<label>
 				Opponent's team
-				<select name="player2TeamId" required>
-					<option value="" disabled selected>Select a team</option>
-					{#each data.teams as t (t.id)}
-						<option value={t.id}>{t.name}</option>
-					{/each}
-				</select>
+				<Combobox items={data.teams} name="player2TeamId" placeholder="Search teams…" required />
 			</label>
 			<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 				<label style="flex:1;">

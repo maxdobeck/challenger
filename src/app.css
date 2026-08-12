@@ -424,12 +424,18 @@ button[type='submit']:hover,
 	color: var(--color-accent);
 }
 
-.quick-upload-row {
-	margin: 1.5rem 0;
+.quick-upload-card {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 1rem;
+	border-color: var(--color-masthead);
 }
 
 .button-quick-upload {
 	display: inline-block;
+	flex-shrink: 0;
 	background: var(--color-masthead);
 	color: #ffffff;
 	border: 1px solid var(--color-masthead);
@@ -445,6 +451,25 @@ button[type='submit']:hover,
 .button-quick-upload:hover {
 	background: var(--color-masthead-dark);
 	border-color: var(--color-masthead-dark);
+}
+
+.section-divider {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin: 1.5rem 0;
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.section-divider::before,
+.section-divider::after {
+	content: '';
+	flex: 1;
+	height: 1px;
+	background: var(--color-border);
 }
 
 .tournament-search {

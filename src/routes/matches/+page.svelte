@@ -21,9 +21,17 @@
 
 <h1>Log a Match</h1>
 
-<p class="quick-upload-row">
+<div class="quick-upload-card card">
+	<div>
+		<strong>In a hurry?</strong>
+		<p class="muted" style="margin: 0.25rem 0 0;">
+			Scan a photo of your score tracker, or describe it in chat.
+		</p>
+	</div>
 	<a href={resolve('/matches/quick-upload')} class="button-quick-upload"><em>Quick</em> Upload</a>
-</p>
+</div>
+
+<div class="section-divider"><span>or log the match manually</span></div>
 
 <form class="stack card" method="post" action="?/logMatch" use:enhance>
 	<label>
@@ -40,12 +48,7 @@
 			<legend>You</legend>
 			<label>
 				Your team
-				<select name="player1TeamId" required>
-					<option value="" disabled selected>Select a team</option>
-					{#each data.teams as t (t.id)}
-						<option value={t.id}>{t.name}</option>
-					{/each}
-				</select>
+				<Combobox items={data.teams} name="player1TeamId" placeholder="Search teams…" required />
 			</label>
 			<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 				<label style="flex:1;">
@@ -79,12 +82,7 @@
 			<legend>Opponent</legend>
 			<label>
 				Opponent's team
-				<select name="player2TeamId" required>
-					<option value="" disabled selected>Select a team</option>
-					{#each data.teams as t (t.id)}
-						<option value={t.id}>{t.name}</option>
-					{/each}
-				</select>
+				<Combobox items={data.teams} name="player2TeamId" placeholder="Search teams…" required />
 			</label>
 			<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 				<label style="flex:1;">
