@@ -65,12 +65,19 @@ jobs:
       DATABASE_URL: postgres://root:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/local
       ORIGIN: http://localhost:4173
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-      # Points at the production LD environment on purpose: this job's traffic
-      # is meant to feed the `social-matchmake-cta` experiment. Stored as a
-      # secret (it's a client-side ID, so not actually sensitive -- a repo
-      # variable would do just as well and would show unmasked in logs).
-      # If it's unset, initLD() silently no-ops and the job still passes -- so
-      # a green run is not on its own proof that traffic was sent.
+      # Points at the production LD environment on purpose: the login /
+      # matchmake tests that run here still identify real subjects against
+      # `social-matchmake-cta`. Stored as a secret (it's a client-side ID, so
+      # not actually sensitive -- a repo variable would do just as well and
+      # would show unmasked in logs). If it's unset, initLD() silently no-ops
+      # and the job still passes -- so a green run is not on its own proof
+      # that traffic was sent.
+      #
+      # The bulk traffic generator (e2e/traffic/matchmake-random-users.e2e.ts,
+      # 25 accounts, tagged @traffic) is excluded by `npm run test:e2e`
+      # itself (see package.json's --grep-invert @traffic), so it doesn't run
+      # here on every push/PR -- run it deliberately with
+      # `npm run test:e2e:traffic`.
       PUBLIC_LD_CLIENT_ID: ${{ secrets.PUBLIC_LD_CLIENT_ID }}
 
     steps:

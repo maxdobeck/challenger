@@ -7,8 +7,8 @@ import {
 	CASUAL_PLAYERS,
 	killteamEmail,
 	DEMO_LOGIN_PASSWORD
-} from '../src/lib/server/db/demo-fixtures';
-import { signOut, waitForLdIdentified } from './helpers';
+} from '../../src/lib/server/db/demo-fixtures';
+import { signOut, waitForLdIdentified } from '../helpers';
 
 // Every login-capable account in either mode: the 3 fixed accounts plus all
 // of FAKE_PLAYERS (seeded by seed.ts in real-auth mode, and mirrored 1:1 in
@@ -99,7 +99,7 @@ const STRICT = process.env.LD_TRAFFIC === '1';
 // and context teardown drop them on the floor.
 const EVENT_FLUSH_MS = 2500;
 
-test.describe('random users click Matchmake Now', () => {
+test.describe('random users click Matchmake Now', { tag: '@traffic' }, () => {
 	for (const account of randomSample(ALL_ACCOUNTS, SAMPLE_SIZE)) {
 		test(`${account.name} (${account.email}) clicks Matchmake Now if it is shown`, async ({
 			page
