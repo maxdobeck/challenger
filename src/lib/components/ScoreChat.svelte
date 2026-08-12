@@ -174,6 +174,18 @@
 </div>
 
 <style>
+	.score-chat label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		flex: 1 1 200px;
+		min-width: 0;
+	}
+
+	.score-chat input[type='file'] {
+		max-width: 100%;
+	}
+
 	.chat-input-row {
 		display: flex;
 		align-items: center;
