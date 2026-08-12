@@ -8,11 +8,25 @@
 		type ScoreScanCopy
 	} from './scoreScanCopy';
 
-	type Category = 'crit' | 'kill' | 'tac';
+	export type Category = 'crit' | 'kill' | 'tac';
 	type Tally = { crit: number; kill: number; tac: number };
 	type ScoreResult = { crit: number; kill: number; tac: number; primary: number; primaryOpChoice: Category };
+	// A live, in-progress reading -- unlike ScoreResult, primaryOpChoice may
+	// still be null (the user hasn't picked one yet) and this fires on every
+	// turn (scan, correction, or picking a Primary op), not just on Confirm.
+	export type ScoreDraft = {
+		crit: number;
+		kill: number;
+		tac: number;
+		primary: number;
+		primaryOpChoice: Category | null;
+	};
 
-	let { onConfirm }: { onConfirm: (result: ScoreResult) => void } = $props();
+	let {
+		onConfirm,
+		onDraftChange
+	}: { onConfirm: (result: ScoreResult) => void; onDraftChange?: (draft: ScoreDraft | null) => void } =
+		$props();
 
 	type Step = 'choose-input' | 'scanning' | 'review-tally' | 'confirm';
 
@@ -34,6 +48,19 @@
 		DEFAULT_SCORE_SCAN_COPY
 	);
 	const copy = $derived(resolveScoreScanCopy($rawCopy));
+
+	// Reports the live reading upward on every turn -- a successful scan, a
+	// correction, or picking which op is Primary -- not just the final
+	// Confirm click, so a parent page can show a running draft score as the
+	// conversation happens. Fires with null once `tally` clears (start-over,
+	// or immediately after Confirm -- see confirm()/startOver() below), which
+	// a parent should treat as "nothing in progress", not "clear what was
+	// already confirmed".
+	$effect(() => {
+		onDraftChange?.(
+			tally ? { ...tally, primary: derivedPrimary, primaryOpChoice: primaryChoice } : null
+		);
+	});
 
 	// Shared by the initial scan and correction turns -- both post a FormData
 	// to /matches/scan and expect the same {crit_op, kill_op, tac_op,

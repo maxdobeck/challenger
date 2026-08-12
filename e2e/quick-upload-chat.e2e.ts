@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { eq } from 'drizzle-orm';
@@ -23,24 +23,33 @@ async function mockScanResponse(page: Page) {
 			body: JSON.stringify({
 				crit_op: fixture.critOp,
 				kill_op: fixture.killOp,
-				tac_op: fixture.tacOp
+				tac_op: fixture.tacOp,
+				resumption_token: null
 			})
 		});
 	});
 }
 
+// The page now renders two ScoreChat instances (one per side), each wrapped
+// in a <section aria-label="..."> -- these tests only exercise the "You"
+// side, so every interaction needs to be scoped to that region or Playwright
+// throws a strict-mode violation on the now-duplicated labels/button text.
+function yourChat(page: Page): Locator {
+	return page.getByRole('region', { name: 'Your score chat' });
+}
+
 // Drives the chat through tally review, Primary-op choice, and the math
 // confirmation step, leaving the caller to submit the underlying form.
-async function reviewAndConfirm(page: Page) {
+async function reviewAndConfirm(chat: Locator) {
 	await expect(
-		page.getByText(`Here's what I read: CRIT ${fixture.critOp}, KILL ${fixture.killOp}, TAC ${fixture.tacOp}.`)
+		chat.getByText(`Here's what I read: CRIT ${fixture.critOp}, KILL ${fixture.killOp}, TAC ${fixture.tacOp}.`)
 	).toBeVisible({ timeout: 15000 });
 
-	await page.getByRole('button', { name: 'Crit', exact: true }).click();
+	await chat.getByRole('button', { name: 'Crit', exact: true }).click();
 
-	await expect(page.getByText(`Your Primary score is ${expectedPrimary}`, { exact: false })).toBeVisible();
+	await expect(chat.getByText(`Your Primary score is ${expectedPrimary}`, { exact: false })).toBeVisible();
 
-	await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+	await chat.getByRole('button', { name: 'Confirm', exact: true }).click();
 }
 
 // Opponent and both team fields are fuzzy-search comboboxes, not <select>s:
@@ -71,13 +80,14 @@ test('choose file/take photo -> pick primary -> confirm math -> log match', asyn
 	// Same hydration-timing gotcha as the existing scan test: the file input's
 	// change handler only exists once Svelte hydrates.
 	await page.waitForLoadState('networkidle');
-	await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
+	const chat = yourChat(page);
+	await chat.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 		name: 'score-tracker.png',
 		mimeType: 'image/png',
 		buffer: sampleScoreTrackerImageBuffer()
 	});
 
-	await reviewAndConfirm(page);
+	await reviewAndConfirm(chat);
 
 	await expect(page.locator('input[name="player1Crit"]')).toHaveValue(String(fixture.critOp));
 	await expect(page.locator('input[name="player1Kill"]')).toHaveValue(String(fixture.killOp));
@@ -102,13 +112,14 @@ test.describe('on a mobile browser', () => {
 		await mockScanResponse(page);
 
 		await page.waitForLoadState('networkidle');
-		await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
+		const chat = yourChat(page);
+		await chat.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 			name: 'score-tracker.png',
 			mimeType: 'image/png',
 			buffer: sampleScoreTrackerImageBuffer()
 		});
 
-		await reviewAndConfirm(page);
+		await reviewAndConfirm(chat);
 		await fillAndSubmitMatchForm(page);
 	});
 });
@@ -126,7 +137,7 @@ test.describe('at a mobile viewport width', () => {
 
 		await expect(page.getByRole('heading', { name: 'Quick Upload' })).toBeVisible();
 
-		const uploadControl = page.getByLabel('Choose File / Take Photo', { exact: true });
+		const uploadControl = yourChat(page).getByLabel('Choose File / Take Photo', { exact: true });
 		await expect(uploadControl).toBeVisible();
 
 		const box = await uploadControl.boundingBox();
@@ -141,11 +152,47 @@ test('type score in natural language -> pick primary -> confirm math -> log matc
 	await page.goto('/matches/quick-upload');
 	await mockScanResponse(page);
 
-	await page.getByLabel('Type your score instead', { exact: true }).fill('5 crit, 2 kill, 4 tac');
-	await page.getByRole('button', { name: 'Send', exact: true }).click();
+	const chat = yourChat(page);
+	await chat.getByLabel('Type your score instead', { exact: true }).fill('5 crit, 2 kill, 4 tac');
+	await chat.getByRole('button', { name: 'Send', exact: true }).click();
 
-	await reviewAndConfirm(page);
+	await reviewAndConfirm(chat);
 	await fillAndSubmitMatchForm(page);
+});
+
+test('the draft score header updates live as the chat progresses', async ({ page }) => {
+	await loginAsMax(page);
+	await page.goto('/matches/quick-upload');
+	await mockScanResponse(page);
+
+	const yourHeader = page.getByTestId('draft-score-you');
+	// Before any scan, the header shows the zeroed-out default.
+	await expect(yourHeader.getByText('Crit 0 · Kill 0 · Tac 0 · Primary 0')).toBeVisible();
+
+	await yourChat(page)
+		.getByLabel('Type your score instead', { exact: true })
+		.fill('5 crit, 2 kill, 4 tac');
+	await yourChat(page).getByRole('button', { name: 'Send', exact: true }).click();
+
+	// The reading appears in the header as soon as the scan resolves --
+	// before Primary is chosen, so Primary is still 0 here.
+	await expect(
+		yourHeader.getByText(`Crit ${fixture.critOp} · Kill ${fixture.killOp} · Tac ${fixture.tacOp} · Primary 0`)
+	).toBeVisible({ timeout: 15000 });
+
+	await yourChat(page).getByRole('button', { name: 'Crit', exact: true }).click();
+
+	// Picking Primary updates the header immediately too, ahead of Confirm.
+	await expect(
+		yourHeader.getByText(
+			`Crit ${fixture.critOp} · Kill ${fixture.killOp} · Tac ${fixture.tacOp} · Primary ${expectedPrimary}`
+		)
+	).toBeVisible();
+
+	// The opponent's side of the header is untouched -- still zeroed out.
+	await expect(
+		page.getByTestId('draft-score-opponent').getByText('Crit 0 · Kill 0 · Tac 0 · Primary 0')
+	).toBeVisible();
 });
 
 test('shows a friendly message once the daily scan cap is hit (demo-mode cookie)', async ({ page }) => {
@@ -170,13 +217,15 @@ test('shows a friendly message once the daily scan cap is hit (demo-mode cookie)
 	]);
 
 	await page.waitForLoadState('networkidle');
-	await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
+	await yourChat(page).getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 		name: 'score-tracker.png',
 		mimeType: 'image/png',
 		buffer: sampleScoreTrackerImageBuffer()
 	});
 
-	await expect(page.getByText("You've hit today's scan limit — enter these scores manually.")).toBeVisible({
+	await expect(
+		yourChat(page).getByText("You've hit today's scan limit — enter these scores manually.")
+	).toBeVisible({
 		timeout: 15000
 	});
 });
@@ -212,14 +261,14 @@ test('shows a friendly message once the daily scan cap is hit (real-DB scanEvent
 
 		await page.goto('/matches/quick-upload');
 		await page.waitForLoadState('networkidle');
-		await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
+		await yourChat(page).getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 			name: 'score-tracker.png',
 			mimeType: 'image/png',
 			buffer: sampleScoreTrackerImageBuffer()
 		});
 
 		await expect(
-			page.getByText("You've hit today's scan limit — enter these scores manually.")
+			yourChat(page).getByText("You've hit today's scan limit — enter these scores manually.")
 		).toBeVisible({ timeout: 15000 });
 	} finally {
 		// Leaves test1 clean for any other test/run that logs in as that account.
