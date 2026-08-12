@@ -134,9 +134,8 @@ test('type score in natural language -> pick primary -> confirm math -> log matc
 	await page.goto('/matches/quick-upload');
 	await mockScanResponse(page);
 
-	await page.getByRole('button', { name: 'Type your score instead', exact: true }).click();
-	await page.getByLabel('Describe your score', { exact: true }).fill('5 crit, 2 kill, 4 tac');
-	await page.getByRole('button', { name: 'Parse', exact: true }).click();
+	await page.getByLabel('Type your score instead', { exact: true }).fill('5 crit, 2 kill, 4 tac');
+	await page.getByRole('button', { name: 'Send', exact: true }).click();
 
 	await reviewAndConfirm(page);
 	await fillAndSubmitMatchForm(page);
