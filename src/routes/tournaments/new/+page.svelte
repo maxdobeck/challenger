@@ -17,12 +17,12 @@
 		<input name="name" required placeholder="e.g. Winter Championship" />
 	</label>
 
-	<div style="display:flex; gap:1rem; flex-wrap:wrap;">
-		<label style="flex:1; min-width:160px;">
+	<div class="form-row">
+		<label>
 			Start date
 			<input type="date" name="startDate" required />
 		</label>
-		<label style="flex:1; min-width:160px;">
+		<label>
 			End date
 			<input type="date" name="endDate" required />
 		</label>
