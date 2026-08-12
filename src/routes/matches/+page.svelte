@@ -63,16 +63,16 @@
 					Kill (0-6)
 					<input type="number" name="player1Kill" min="0" max="6" bind:value={player1.kill} />
 				</label>
-				<label style="flex:1;">
-					Primary Op
-					<select name="player1PrimaryOpChoice" required>
-						<option value="" disabled selected>Choose…</option>
-						<option value="crit">Crit</option>
-						<option value="tac">Tac</option>
-						<option value="kill">Kill</option>
-					</select>
-				</label>
 			</div>
+			<label>
+				Primary Op
+				<select name="player1PrimaryOpChoice" required>
+					<option value="" disabled selected>Choose…</option>
+					<option value="crit">Crit</option>
+					<option value="tac">Tac</option>
+					<option value="kill">Kill</option>
+				</select>
+			</label>
 			<ScorePhotoScan
 				groupName="You"
 				onApply={(scores) => {
@@ -102,16 +102,16 @@
 					Kill (0-6)
 					<input type="number" name="player2Kill" min="0" max="6" bind:value={player2.kill} />
 				</label>
-				<label style="flex:1;">
-					Primary Op
-					<select name="player2PrimaryOpChoice" required>
-						<option value="" disabled selected>Choose…</option>
-						<option value="crit">Crit</option>
-						<option value="tac">Tac</option>
-						<option value="kill">Kill</option>
-					</select>
-				</label>
 			</div>
+			<label>
+				Primary Op
+				<select name="player2PrimaryOpChoice" required>
+					<option value="" disabled selected>Choose…</option>
+					<option value="crit">Crit</option>
+					<option value="tac">Tac</option>
+					<option value="kill">Kill</option>
+				</select>
+			</label>
 			<ScorePhotoScan
 				groupName="Opponent"
 				onApply={(scores) => {
