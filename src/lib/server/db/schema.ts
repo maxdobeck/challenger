@@ -68,12 +68,24 @@ export const match = pgTable('match', {
 	player1Tac: integer('player1_tac').notNull().default(0),
 	player1Kill: integer('player1_kill').notNull().default(0),
 	player1Primary: integer('player1_primary').notNull().default(0),
+	player1PrimaryOpChoice: text('player1_primary_op_choice', { enum: ['crit', 'kill', 'tac'] }),
 	player2Crit: integer('player2_crit').notNull().default(0),
 	player2Tac: integer('player2_tac').notNull().default(0),
 	player2Kill: integer('player2_kill').notNull().default(0),
 	player2Primary: integer('player2_primary').notNull().default(0),
+	player2PrimaryOpChoice: text('player2_primary_op_choice', { enum: ['crit', 'kill', 'tac'] }),
 	playedAt: timestamp('played_at', { withTimezone: true }).notNull().defaultNow(),
 	notes: text('notes')
+});
+
+// One row per photo/text scan attempt, used to enforce a 20-scans-per-24h cap in real-DB mode
+// (demo mode enforces the same cap via a cookie instead, since it has no durable per-user store).
+export const scanEvent = pgTable('scan_event', {
+	id: serial('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 
 export const userProfile = pgTable('user_profile', {
@@ -83,21 +95,6 @@ export const userProfile = pgTable('user_profile', {
 	hasPlayedTournament: boolean('has_played_tournament').notNull().default(false),
 	totalMatches: integer('total_matches').notNull().default(0),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
-});
-
-// One row per AI score-scan attempt (success or failure). Doubles as the
-// abuse-prevention log: the scan endpoint counts a user's rows from the last
-// 24 hours to enforce the daily cap, so failed attempts count too.
-export const scoreScan = pgTable('score_scan', {
-	id: serial('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => user.id, { onDelete: 'cascade' }),
-	status: text('status').notNull(), // 'success' | 'error'
-	critOp: integer('crit_op'),
-	killOp: integer('kill_op'),
-	tacOp: integer('tac_op'),
-	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 });
 
 export * from './auth.schema';

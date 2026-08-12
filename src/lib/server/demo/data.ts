@@ -21,6 +21,8 @@ import {
 	randomScoreSet,
 	type Rng
 } from '$lib/server/db/demo-fixtures';
+import type { PrimaryOpChoice } from '$lib/server/scoring';
+import { isKvConfigured, nextKvMatchId, pushKvMatch, getKvMatches } from '$lib/server/demo/kv';
 
 type DemoUser = { id: string; name: string; email: string };
 type DemoTeam = { id: number; name: string };
@@ -46,10 +48,12 @@ type DemoMatch = {
 	player1Tac: number;
 	player1Kill: number;
 	player1Primary: number;
+	player1PrimaryOpChoice: PrimaryOpChoice | null;
 	player2Crit: number;
 	player2Tac: number;
 	player2Kill: number;
 	player2Primary: number;
+	player2PrimaryOpChoice: PrimaryOpChoice | null;
 	playedAt: Date;
 };
 
@@ -194,10 +198,14 @@ function pushDemoMatch(player1Id: string, player2Id: string, tournamentId: numbe
 		player1Tac: p1.tac,
 		player1Kill: p1.kill,
 		player1Primary: p1.primary,
+		// Historical seeded matches predate the primary-op-choice concept, so it's
+		// left unrecorded here, same as it would be for pre-existing real DB rows.
+		player1PrimaryOpChoice: null,
 		player2Crit: p2.crit,
 		player2Tac: p2.tac,
 		player2Kill: p2.kill,
 		player2Primary: p2.primary,
+		player2PrimaryOpChoice: null,
 		playedAt: randomPastDate(180, rng)
 	});
 }
@@ -259,8 +267,20 @@ function tournamentName(id: number | null): string | null {
 	return id == null ? null : (tournamentById.get(id)?.name ?? null);
 }
 
-export function getDemoLeaderboardRows() {
-	return demoMatches.map((m) => ({
+// Merges the deterministic seeded matches (regenerated in-memory on every cold
+// start) with any additional matches a user has actually saved, which live in
+// KV when it's configured (see kv.ts) or nowhere durable otherwise -- in which
+// case there's nothing extra to merge in and this is just the seeded set.
+async function getAllDemoMatches(): Promise<DemoMatch[]> {
+	if (!isKvConfigured) return demoMatches;
+	type StoredDemoMatch = Omit<DemoMatch, 'playedAt'> & { playedAt: string };
+	const extra = await getKvMatches<StoredDemoMatch>();
+	return [...demoMatches, ...extra.map((m) => ({ ...m, playedAt: new Date(m.playedAt) }))];
+}
+
+export async function getDemoLeaderboardRows() {
+	const matches = await getAllDemoMatches();
+	return matches.map((m) => ({
 		player1Id: m.player1Id,
 		player1Name: userName(m.player1Id),
 		player2Id: m.player2Id,
@@ -271,15 +291,18 @@ export function getDemoLeaderboardRows() {
 		player1Tac: m.player1Tac,
 		player1Kill: m.player1Kill,
 		player1Primary: m.player1Primary,
+		player1PrimaryOpChoice: m.player1PrimaryOpChoice,
 		player2Crit: m.player2Crit,
 		player2Tac: m.player2Tac,
 		player2Kill: m.player2Kill,
-		player2Primary: m.player2Primary
+		player2Primary: m.player2Primary,
+		player2PrimaryOpChoice: m.player2PrimaryOpChoice
 	}));
 }
 
-export function getDemoUserMatchRows(userId: string) {
-	return demoMatches
+export async function getDemoUserMatchRows(userId: string) {
+	const matches = await getAllDemoMatches();
+	return matches
 		.filter((m) => m.player1Id === userId || m.player2Id === userId)
 		.map((m) => ({
 			id: m.id,
@@ -295,10 +318,12 @@ export function getDemoUserMatchRows(userId: string) {
 			player1Tac: m.player1Tac,
 			player1Kill: m.player1Kill,
 			player1Primary: m.player1Primary,
+			player1PrimaryOpChoice: m.player1PrimaryOpChoice,
 			player2Crit: m.player2Crit,
 			player2Tac: m.player2Tac,
 			player2Kill: m.player2Kill,
-			player2Primary: m.player2Primary
+			player2Primary: m.player2Primary,
+			player2PrimaryOpChoice: m.player2PrimaryOpChoice
 		}))
 		.sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime());
 }
@@ -314,8 +339,9 @@ export function getDemoOpponents(currentUserId: string): { id: string; name: str
 		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function getDemoStatsRows(userId: string) {
-	return demoMatches
+export async function getDemoStatsRows(userId: string) {
+	const matches = await getAllDemoMatches();
+	return matches
 		.filter((m) => m.player1Id === userId || m.player2Id === userId)
 		.map((m) => ({
 			player1Id: m.player1Id,
@@ -327,10 +353,12 @@ export function getDemoStatsRows(userId: string) {
 			player1Tac: m.player1Tac,
 			player1Kill: m.player1Kill,
 			player1Primary: m.player1Primary,
+			player1PrimaryOpChoice: m.player1PrimaryOpChoice,
 			player2Crit: m.player2Crit,
 			player2Tac: m.player2Tac,
 			player2Kill: m.player2Kill,
-			player2Primary: m.player2Primary
+			player2Primary: m.player2Primary,
+			player2PrimaryOpChoice: m.player2PrimaryOpChoice
 		}));
 }
 
@@ -338,7 +366,7 @@ export function getDemoUserName(userId: string): string | null {
 	return userById.get(userId)?.name ?? null;
 }
 
-export function addDemoMatch(input: {
+export async function addDemoMatch(input: {
 	player1Id: string;
 	player2Id: string;
 	player1TeamId: number;
@@ -348,16 +376,25 @@ export function addDemoMatch(input: {
 	player1Tac: number;
 	player1Kill: number;
 	player1Primary: number;
+	player1PrimaryOpChoice?: PrimaryOpChoice | null;
 	player2Crit: number;
 	player2Tac: number;
 	player2Kill: number;
 	player2Primary: number;
-}): void {
-	demoMatches.push({
-		id: nextMatchId++,
+	player2PrimaryOpChoice?: PrimaryOpChoice | null;
+}): Promise<void> {
+	const newMatch: DemoMatch = {
+		id: isKvConfigured ? await nextKvMatchId() : nextMatchId++,
 		playedAt: new Date(),
-		...input
-	});
+		...input,
+		player1PrimaryOpChoice: input.player1PrimaryOpChoice ?? null,
+		player2PrimaryOpChoice: input.player2PrimaryOpChoice ?? null
+	};
+	if (isKvConfigured) {
+		await pushKvMatch(newMatch);
+	} else {
+		demoMatches.push(newMatch);
+	}
 }
 
 // Tournament dropdown options for the Log Match form — mirrors the real query in
@@ -389,7 +426,7 @@ export function getDemoTournaments() {
 // Tournament detail: the tournament, its attendees, and its match rows (raw —
 // the route computes totals/result, same as the DB path). Returns null if the id
 // doesn't exist, so the route can 404. Mirrors tournaments/[id]/+page.server.ts.
-export function getDemoTournamentDetail(id: number) {
+export async function getDemoTournamentDetail(id: number) {
 	const tournament = tournamentById.get(id);
 	if (!tournament) return null;
 
@@ -398,7 +435,8 @@ export function getDemoTournamentDetail(id: number) {
 		.map((a) => ({ id: a.userId, name: userName(a.userId), registeredAt: a.registeredAt }))
 		.sort((a, b) => a.name.localeCompare(b.name));
 
-	const matchRows = demoMatches
+	const allMatches = await getAllDemoMatches();
+	const matchRows = allMatches
 		.filter((m) => m.tournamentId === id)
 		.map((m) => ({
 			id: m.id,
@@ -411,30 +449,16 @@ export function getDemoTournamentDetail(id: number) {
 			player1Tac: m.player1Tac,
 			player1Kill: m.player1Kill,
 			player1Primary: m.player1Primary,
+			player1PrimaryOpChoice: m.player1PrimaryOpChoice,
 			player2Crit: m.player2Crit,
 			player2Tac: m.player2Tac,
 			player2Kill: m.player2Kill,
-			player2Primary: m.player2Primary
+			player2Primary: m.player2Primary,
+			player2PrimaryOpChoice: m.player2PrimaryOpChoice
 		}))
 		.sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime());
 
 	return { tournament, attendees, matchRows };
-}
-
-// In-memory AI score-scan log for demo mode, mirroring the real `score_scan`
-// table well enough to drive the same rolling-24h rate limit.
-type DemoScoreScan = { userId: string; status: 'success' | 'error'; createdAt: Date };
-const demoScoreScans: DemoScoreScan[] = [];
-const DEMO_SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-export function recordDemoScan(userId: string, status: 'success' | 'error'): void {
-	demoScoreScans.push({ userId, status, createdAt: new Date() });
-}
-
-export function countRecentDemoScans(userId: string): number {
-	const cutoff = Date.now() - DEMO_SCAN_WINDOW_MS;
-	return demoScoreScans.filter((s) => s.userId === userId && s.createdAt.getTime() > cutoff)
-		.length;
 }
 
 let nextTournamentId = DEMO_TOURNAMENT_COUNT + 1;

@@ -1,5 +1,5 @@
 {
-  "id": "4f900806-67b5-4316-90d5-57cb21b16a9c",
+  "id": "796b7d4b-ed1b-4612-bdf4-77c578a877f2",
   "prevId": "88ab113d-6cd1-4083-829c-58078f2b6669",
   "version": "7",
   "dialect": "postgresql",
@@ -72,6 +72,12 @@
           "notNull": true,
           "default": 0
         },
+        "player1_primary_op_choice": {
+          "name": "player1_primary_op_choice",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "player2_crit": {
           "name": "player2_crit",
           "type": "integer",
@@ -99,6 +105,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "player2_primary_op_choice": {
+          "name": "player2_primary_op_choice",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "played_at": {
           "name": "played_at",
@@ -188,8 +200,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.score_scan": {
-      "name": "score_scan",
+    "public.scan_event": {
+      "name": "scan_event",
       "schema": "",
       "columns": {
         "id": {
@@ -204,30 +216,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "crit_op": {
-          "name": "crit_op",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "kill_op": {
-          "name": "kill_op",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tac_op": {
-          "name": "tac_op",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -238,9 +226,9 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "score_scan_user_id_user_id_fk": {
-          "name": "score_scan_user_id_user_id_fk",
-          "tableFrom": "score_scan",
+        "scan_event_user_id_user_id_fk": {
+          "name": "scan_event_user_id_user_id_fk",
+          "tableFrom": "scan_event",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"

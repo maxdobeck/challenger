@@ -12,7 +12,7 @@ import {
 	getDemoTournamentOptions,
 	getDemoUserMatchRows
 } from '$lib/server/demo/data';
-import { outcomeFor, totalScore } from '$lib/server/scoring';
+import { outcomeFor, totalScore, type PrimaryOpChoice } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -43,7 +43,7 @@ export const load: PageServerLoad = async (event) => {
 				.orderBy(desc(tournament.startDate));
 
 	const rows = DEMO_MODE
-		? getDemoUserMatchRows(currentUser.id)
+		? await getDemoUserMatchRows(currentUser.id)
 		: await db
 				.select({
 					id: match.id,
@@ -59,10 +59,12 @@ export const load: PageServerLoad = async (event) => {
 					player1Tac: match.player1Tac,
 					player1Kill: match.player1Kill,
 					player1Primary: match.player1Primary,
+					player1PrimaryOpChoice: match.player1PrimaryOpChoice,
 					player2Crit: match.player2Crit,
 					player2Tac: match.player2Tac,
 					player2Kill: match.player2Kill,
-					player2Primary: match.player2Primary
+					player2Primary: match.player2Primary,
+					player2PrimaryOpChoice: match.player2PrimaryOpChoice
 				})
 				.from(match)
 				.innerJoin(player1Team, eq(match.player1TeamId, player1Team.id))
@@ -81,7 +83,8 @@ export const load: PageServerLoad = async (event) => {
 			crit: youArePlayer1 ? r.player1Crit : r.player2Crit,
 			tac: youArePlayer1 ? r.player1Tac : r.player2Tac,
 			kill: youArePlayer1 ? r.player1Kill : r.player2Kill,
-			primary: youArePlayer1 ? r.player1Primary : r.player2Primary
+			primary: youArePlayer1 ? r.player1Primary : r.player2Primary,
+			primaryOpChoice: youArePlayer1 ? r.player1PrimaryOpChoice : r.player2PrimaryOpChoice
 		};
 		const opponent = {
 			name: youArePlayer1 ? r.player2Name : r.player1Name,
@@ -89,7 +92,8 @@ export const load: PageServerLoad = async (event) => {
 			crit: youArePlayer1 ? r.player2Crit : r.player1Crit,
 			tac: youArePlayer1 ? r.player2Tac : r.player1Tac,
 			kill: youArePlayer1 ? r.player2Kill : r.player1Kill,
-			primary: youArePlayer1 ? r.player2Primary : r.player1Primary
+			primary: youArePlayer1 ? r.player2Primary : r.player1Primary,
+			primaryOpChoice: youArePlayer1 ? r.player2PrimaryOpChoice : r.player1PrimaryOpChoice
 		};
 		const yourTotal = totalScore(you);
 		const opponentTotal = totalScore(opponent);
@@ -113,6 +117,15 @@ export const load: PageServerLoad = async (event) => {
 function parseScore(formData: FormData, key: string) {
 	const raw = formData.get(key)?.toString();
 	return raw ? Number(raw) : 0;
+}
+
+const PRIMARY_OP_CHOICES: readonly PrimaryOpChoice[] = ['crit', 'kill', 'tac'];
+
+function parsePrimaryOpChoice(formData: FormData, key: string): PrimaryOpChoice | null {
+	const raw = formData.get(key)?.toString();
+	return (PRIMARY_OP_CHOICES as readonly string[]).includes(raw ?? '')
+		? (raw as PrimaryOpChoice)
+		: null;
 }
 
 export const actions: Actions = {
@@ -143,14 +156,16 @@ export const actions: Actions = {
 			player1Tac: parseScore(formData, 'player1Tac'),
 			player1Kill: parseScore(formData, 'player1Kill'),
 			player1Primary: parseScore(formData, 'player1Primary'),
+			player1PrimaryOpChoice: parsePrimaryOpChoice(formData, 'player1PrimaryOpChoice'),
 			player2Crit: parseScore(formData, 'player2Crit'),
 			player2Tac: parseScore(formData, 'player2Tac'),
 			player2Kill: parseScore(formData, 'player2Kill'),
-			player2Primary: parseScore(formData, 'player2Primary')
+			player2Primary: parseScore(formData, 'player2Primary'),
+			player2PrimaryOpChoice: parsePrimaryOpChoice(formData, 'player2PrimaryOpChoice')
 		};
 
 		if (DEMO_MODE) {
-			addDemoMatch(values);
+			await addDemoMatch(values);
 		} else {
 			await db.insert(match).values(values);
 			// Keep the precomputed LD attributes in sync with the match table.

@@ -44,7 +44,7 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const rows = DEMO_MODE
-		? getDemoStatsRows(targetUserId)
+		? await getDemoStatsRows(targetUserId)
 		: await db
 				.select({
 					player1Id: match.player1Id,

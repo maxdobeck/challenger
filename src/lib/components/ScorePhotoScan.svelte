@@ -21,12 +21,7 @@
 		scanning = true;
 		error = null;
 		try {
-			let bitmap: ImageBitmap;
-			try {
-				bitmap = await createImageBitmap(file);
-			} catch {
-				throw new Error("Couldn't read that image — try a PNG or JPEG screenshot instead.");
-			}
+			const bitmap = await createImageBitmap(file);
 			const canvas = document.createElement('canvas');
 			canvas.width = bitmap.width;
 			canvas.height = bitmap.height;
@@ -43,9 +38,6 @@
 			formData.append('image', blob, 'score-tracker.png');
 
 			const res = await fetch('/matches/scan', { method: 'POST', body: formData });
-			if (res.status === 429) {
-				throw new Error("You've hit today's scan limit — enter these scores manually.");
-			}
 			if (!res.ok) throw new Error(`Scan failed (${res.status}).`);
 
 			const result = await res.json();
