@@ -20,9 +20,11 @@ import { loginAsMax } from '../helpers';
 // runs (vite preview, not adapter-vercel) can't produce that exact status
 // code. What *does* reproduce locally, confirmed by actually running this
 // test against this photo: the PNG re-encode of this real photo exceeds the
-// app's own 5MB limit, so it fails with the app's `400 Image is too large.`
-// instead — same root cause (lossless re-encode, no size guard before the
-// canvas step), one layer earlier than the platform's 413.
+// app's own 5MB limit, so it fails with the app's own `400 Image is too
+// large.` — same root cause (lossless re-encode, no size guard before the
+// canvas step), one layer earlier than the platform's 413. The client now
+// surfaces that message verbatim (rather than a generic "Scan failed (400).")
+// via ScorePhotoScan.svelte's error(status, message) JSON body parsing.
 //
 // Tagged @ai and excluded from package.json's test:e2e (grep-invert
 // "@traffic|@ai") because it ships a large binary fixture and depends on
@@ -56,7 +58,7 @@ test.describe('scanning a real oversized phone photo', { tag: '@ai' }, () => {
 		// mocked scan tests' 15s waits, just larger for real (not stubbed) work.
 		const scanError = group.locator('.error');
 		await expect(scanError).toBeVisible({ timeout: 30_000 });
-		await expect(scanError).toHaveText('Scan failed (400).');
+		await expect(scanError).toHaveText('Image is too large.');
 
 		expect(pageErrors).toEqual([]);
 	});

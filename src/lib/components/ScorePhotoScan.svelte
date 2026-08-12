@@ -46,7 +46,13 @@
 			if (res.status === 429) {
 				throw new Error("You've hit today's scan limit — enter these scores manually.");
 			}
-			if (!res.ok) throw new Error(`Scan failed (${res.status}).`);
+			if (!res.ok) {
+				// SvelteKit's error(status, message) endpoints reply with JSON
+				// {message}; a platform-level rejection (e.g. a host's payload-size
+				// limit) won't be, so fall back to the generic status message.
+				const body = await res.json().catch(() => null);
+				throw new Error(body?.message ?? `Scan failed (${res.status}).`);
+			}
 
 			const result = await res.json();
 			draft = { crit: result.crit_op, kill: result.kill_op, tac: result.tac_op };
