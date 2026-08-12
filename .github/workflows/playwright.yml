@@ -2,9 +2,13 @@ name: Playwright Tests
 
 on:
   pull_request:
-    branches: [main]
+    # claude/db-persistence-changes is included so a PR stacked on top of it
+    # (rather than on main) still gets real CI, not just local verification.
+    # Remove that entry once that branch merges to main and no PR targets it
+    # directly anymore.
+    branches: [main, claude/db-persistence-changes]
   push:
-    branches: [main]
+    branches: [main, claude/db-persistence-changes]
 
 jobs:
   # Unit tests: pure logic (e.g. src/lib/server/scoring.ts), no browser or DB needed.
