@@ -3,7 +3,7 @@ import type { ServerLDUser, ServerLDProfile } from './context';
 
 export const SCORE_TEXT_PARSE_CONFIG_KEY = 'score-text-parse';
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const DEFAULT_MODEL = 'claude-haiku-4-5';
 const DEFAULT_PROMPT =
 	'Parse a player\'s natural-language description of their Kill Team score into CRIT OP, ' +
 	'KILL OP, and TAC OP as integers 0-6. Respond with strict JSON only: ' +

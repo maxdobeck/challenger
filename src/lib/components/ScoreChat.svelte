@@ -23,7 +23,7 @@
 		try {
 			const res = await fetch('/matches/scan', { method: 'POST', body: formData });
 			if (res.status === 429) {
-				throw new Error("You've hit today's scan limit. Try again later.");
+				throw new Error("You've hit today's scan limit — enter these scores manually.");
 			}
 			if (!res.ok) throw new Error(`Scan failed (${res.status}).`);
 
@@ -42,7 +42,12 @@
 		if (!file) return;
 
 		try {
-			const bitmap = await createImageBitmap(file);
+			let bitmap: ImageBitmap;
+			try {
+				bitmap = await createImageBitmap(file);
+			} catch {
+				throw new Error("Couldn't read that image — try a PNG or JPEG screenshot instead.");
+			}
 			const canvas = document.createElement('canvas');
 			canvas.width = bitmap.width;
 			canvas.height = bitmap.height;

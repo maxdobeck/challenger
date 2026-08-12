@@ -10,6 +10,24 @@ function mockScoreResult(): ScoreScanResult {
 	return { crit: roll(), kill: roll(), tac: roll() };
 }
 
+// A forced tool call rather than free-text + JSON.parse guarantees the
+// response shape matches ScoreScanResult -- proven more reliable than parsing
+// a text block (see the original direct-Anthropic implementation this was
+// ported from, commit 97b44e9).
+const SCORE_TOOL = {
+	name: 'record_score_reading',
+	description: 'Record the Crit, Kill, and Tac values read or parsed from the input.',
+	input_schema: {
+		type: 'object',
+		properties: {
+			crit: { type: 'integer', minimum: 0, maximum: 6, description: 'Crit value, 0-6' },
+			kill: { type: 'integer', minimum: 0, maximum: 6, description: 'Kill value, 0-6' },
+			tac: { type: 'integer', minimum: 0, maximum: 6, description: 'Tac value, 0-6' }
+		},
+		required: ['crit', 'kill', 'tac']
+	}
+} satisfies Anthropic.Tool;
+
 function isPlausibleScoreResult(value: unknown): value is ScoreScanResult {
 	return (
 		!!value &&
@@ -61,6 +79,8 @@ export async function runScoreCompletion(
 			model: modelName,
 			max_tokens: 256,
 			system: systemPrompt,
+			tools: [SCORE_TOOL],
+			tool_choice: { type: 'tool', name: SCORE_TOOL.name },
 			messages: [{ role: 'user', content: userContent }]
 		});
 		tracker?.trackDuration(Date.now() - start);
@@ -70,10 +90,10 @@ export async function runScoreCompletion(
 			output: response.usage?.output_tokens ?? 0
 		});
 
-		const textBlock = response.content.find((block) => block.type === 'text');
-		const parsed = textBlock?.type === 'text' ? JSON.parse(textBlock.text) : null;
+		const toolUse = response.content.find((block) => block.type === 'tool_use');
+		const parsed = toolUse?.type === 'tool_use' ? toolUse.input : null;
 		if (!isPlausibleScoreResult(parsed)) {
-			throw new Error('Model response was not the expected {crit, kill, tac} shape.');
+			throw new Error('Model did not return a structured reading.');
 		}
 
 		tracker?.trackSuccess();

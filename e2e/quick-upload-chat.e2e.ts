@@ -128,7 +128,7 @@ test('shows a friendly message once the daily scan cap is hit', async ({ page })
 		buffer: sampleScoreTrackerImageBuffer()
 	});
 
-	await expect(page.getByText("You've hit today's scan limit. Try again later.")).toBeVisible({
+	await expect(page.getByText("You've hit today's scan limit — enter these scores manually.")).toBeVisible({
 		timeout: 15000
 	});
 });

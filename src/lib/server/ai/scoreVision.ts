@@ -3,7 +3,9 @@ import type { ServerLDUser, ServerLDProfile } from './context';
 
 export const SCORE_PHOTO_SCAN_CONFIG_KEY = 'score-photo-scan';
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+// claude-haiku-4-5: cheap/fast, proven sufficient for this structured
+// extraction task by the original direct-Anthropic implementation (97b44e9).
+const DEFAULT_MODEL = 'claude-haiku-4-5';
 const DEFAULT_PROMPT =
 	'You are reading a Kill Team turn-tracker card from a photo. The card has five magnets ' +
 	'sliding along labeled scales: KILL OP, CRIT OP, TAC OP, CP, and Turning Point. Read the ' +
