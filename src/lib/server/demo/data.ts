@@ -332,6 +332,10 @@ export function getDemoTeams(): DemoTeam[] {
 	return [...demoTeams].sort((a, b) => a.name.localeCompare(b.name));
 }
 
+export function getDemoTeamById(id: number): DemoTeam | null {
+	return teamById.get(id) ?? null;
+}
+
 export function getDemoOpponents(currentUserId: string): { id: string; name: string }[] {
 	return demoUsers
 		.filter((u) => u.id !== currentUserId)
@@ -345,10 +349,13 @@ export async function getDemoStatsRows(userId: string) {
 		.filter((m) => m.player1Id === userId || m.player2Id === userId)
 		.map((m) => ({
 			player1Id: m.player1Id,
+			player1TeamId: m.player1TeamId,
 			player1TeamName: teamName(m.player1TeamId),
+			player2TeamId: m.player2TeamId,
 			player2TeamName: teamName(m.player2TeamId),
 			tournamentId: m.tournamentId,
 			tournamentName: tournamentName(m.tournamentId),
+			playedAt: m.playedAt,
 			player1Crit: m.player1Crit,
 			player1Tac: m.player1Tac,
 			player1Kill: m.player1Kill,

@@ -590,6 +590,45 @@ button[type='submit']:hover,
 	color: #ffffff;
 }
 
+.most-played-badge {
+	display: inline-block;
+	background: rgba(226, 64, 26, 0.12);
+	color: var(--color-accent);
+	border: 1px solid var(--color-accent);
+	border-radius: 999px;
+	padding: 0.3rem 0.9rem;
+	font-size: 0.8rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	margin: 0 0 1rem;
+}
+
+.team-record-chart {
+	margin-bottom: 1.5rem;
+}
+
+.chart-legend {
+	display: flex;
+	gap: 1.25rem;
+	margin-top: 0.5rem;
+	font-size: 0.85rem;
+	color: var(--color-text-muted);
+}
+
+.chart-legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+}
+
+.chart-legend-item i {
+	display: inline-block;
+	width: 0.7rem;
+	height: 0.7rem;
+	border-radius: 999px;
+}
+
 code {
 	background: var(--color-surface);
 	border: 1px solid var(--color-border);

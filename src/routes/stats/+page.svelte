@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import type { PageServerData } from './$types';
 	import SortableTable from '$lib/components/SortableTable.svelte';
 	import { flagVariation } from '$lib/stores/launchdarkly';
@@ -75,7 +76,20 @@
 			{data.summary.totalWins}W / {data.summary.totalLosses}L / {data.summary.totalDraws}D
 		</p>
 		{#if data.summary.favoriteTeam}
-			<p class="muted">Most played team: {data.summary.favoriteTeam}</p>
+			<p class="muted">
+				Most played team:
+				{#if data.viewingOwnStats}
+					<a href={resolve('/teams/[id]', { id: String(data.summary.favoriteTeam.id) })}
+						>{data.summary.favoriteTeam.name}</a
+					>
+				{:else}
+					<a
+						href="{resolve('/teams/[id]', {
+							id: String(data.summary.favoriteTeam.id)
+						})}?user={data.targetUserId}">{data.summary.favoriteTeam.name}</a
+					>
+				{/if}
+			</p>
 		{/if}
 	{/if}
 </div>
@@ -91,7 +105,13 @@
 	>
 		{#snippet cell(t, col)}
 			{#if col.key === 'team'}
-				{t.teamName}
+				{#if data.viewingOwnStats}
+					<a href={resolve('/teams/[id]', { id: String(t.teamId) })}>{t.teamName}</a>
+				{:else}
+					<a href="{resolve('/teams/[id]', { id: String(t.teamId) })}?user={data.targetUserId}"
+						>{t.teamName}</a
+					>
+				{/if}
 			{:else if col.key === 'winRate'}
 				{pct(t.winRate)}
 			{:else if col.key === 'games'}
