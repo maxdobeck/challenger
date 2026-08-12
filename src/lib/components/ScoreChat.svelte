@@ -1,4 +1,13 @@
 <script lang="ts">
+	import { flagVariation } from '$lib/stores/launchdarkly';
+	import {
+		DEFAULT_SCORE_SCAN_COPY,
+		SCORE_SCAN_COPY_FLAG_KEY,
+		resolveScoreScanCopy,
+		interpolate,
+		type ScoreScanCopy
+	} from './scoreScanCopy';
+
 	type Category = 'crit' | 'kill' | 'tac';
 	type Tally = { crit: number; kill: number; tac: number };
 	type ScoreResult = { crit: number; kill: number; tac: number; primary: number; primaryOpChoice: Category };
@@ -17,21 +26,27 @@
 		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
 	);
 
+	const rawCopy = flagVariation<Partial<ScoreScanCopy>>(
+		SCORE_SCAN_COPY_FLAG_KEY,
+		DEFAULT_SCORE_SCAN_COPY
+	);
+	const copy = $derived(resolveScoreScanCopy($rawCopy));
+
 	async function submitScan(formData: FormData) {
 		step = 'scanning';
 		error = null;
 		try {
 			const res = await fetch('/matches/scan', { method: 'POST', body: formData });
 			if (res.status === 429) {
-				throw new Error("You've hit today's scan limit — enter these scores manually.");
+				throw new Error(copy.rateLimitError);
 			}
-			if (!res.ok) throw new Error(`Scan failed (${res.status}).`);
+			if (!res.ok) throw new Error(interpolate(copy.scanFailedError, { status: res.status }));
 
 			const result = await res.json();
 			tally = { crit: result.crit_op, kill: result.kill_op, tac: result.tac_op };
 			step = 'review-tally';
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Scan failed.';
+			error = err instanceof Error ? err.message : copy.genericScanError;
 			step = 'choose-input';
 		}
 	}
@@ -46,25 +61,25 @@
 			try {
 				bitmap = await createImageBitmap(file);
 			} catch {
-				throw new Error("Couldn't read that image — try a PNG or JPEG screenshot instead.");
+				throw new Error(copy.unreadableImageError);
 			}
 			const canvas = document.createElement('canvas');
 			canvas.width = bitmap.width;
 			canvas.height = bitmap.height;
 			const ctx = canvas.getContext('2d');
-			if (!ctx) throw new Error('Canvas is not supported in this browser.');
+			if (!ctx) throw new Error(copy.canvasUnsupportedError);
 			ctx.drawImage(bitmap, 0, 0);
 
 			const blob = await new Promise<Blob | null>((resolve) =>
 				canvas.toBlob(resolve, 'image/png')
 			);
-			if (!blob) throw new Error('Could not encode the photo.');
+			if (!blob) throw new Error(copy.encodeFailedError);
 
 			const formData = new FormData();
 			formData.append('image', blob, 'score-tracker.png');
 			await submitScan(formData);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Could not read that photo.';
+			error = err instanceof Error ? err.message : copy.genericPhotoError;
 		} finally {
 			input.value = '';
 		}
@@ -99,10 +114,10 @@
 
 <div class="score-chat card stack">
 	{#if step === 'choose-input'}
-		<p>How do you want to log your score?</p>
+		<p>{copy.chooseInputPrompt}</p>
 		<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
 			<label>
-				Choose File / Take Photo
+				{copy.fileInputLabel}
 				<input type="file" accept="image/*" onchange={handleFileChange} />
 			</label>
 		</div>
@@ -115,8 +130,8 @@
 		>
 			<input
 				type="text"
-				placeholder="Type your score instead"
-				aria-label="Type your score instead"
+				placeholder={copy.textInputPlaceholder}
+				aria-label={copy.textInputPlaceholder}
 				bind:value={textValue}
 				onkeydown={(e) => {
 					if (e.key === 'Enter') {
@@ -125,7 +140,12 @@
 					}
 				}}
 			/>
-			<button type="submit" class="send-button" aria-label="Send" disabled={!textValue.trim()}>
+			<button
+				type="submit"
+				class="send-button"
+				aria-label={copy.sendButtonAriaLabel}
+				disabled={!textValue.trim()}
+			>
 				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
 					<path
 						d="M12 19V5M12 5L6 11M12 5l6 6"
@@ -138,23 +158,28 @@
 			</button>
 		</form>
 	{:else if step === 'scanning'}
-		<p class="muted">Reading your score…</p>
+		<p class="muted">{copy.scanningLabel}</p>
 	{:else if step === 'review-tally' && tally}
-		<p>Here's what I read: CRIT {tally.crit}, KILL {tally.kill}, TAC {tally.tac}.</p>
-		<p>Which op is your Primary?</p>
+		<p>{interpolate(copy.reviewTallyMessage, { crit: tally.crit, kill: tally.kill, tac: tally.tac })}</p>
+		<p>{copy.reviewTallyPrompt}</p>
 		<div style="display:flex; gap:0.5rem;">
-			<button type="button" onclick={() => choosePrimary('crit')}>Crit</button>
-			<button type="button" onclick={() => choosePrimary('kill')}>Kill</button>
-			<button type="button" onclick={() => choosePrimary('tac')}>Tac</button>
+			<button type="button" onclick={() => choosePrimary('crit')}>{copy.primaryCritLabel}</button>
+			<button type="button" onclick={() => choosePrimary('kill')}>{copy.primaryKillLabel}</button>
+			<button type="button" onclick={() => choosePrimary('tac')}>{copy.primaryTacLabel}</button>
 		</div>
 	{:else if step === 'confirm' && tally && primaryChoice}
 		<p>
-			Your Primary score is {derivedPrimary} (ceil({tally[primaryChoice]} / 2)), for a total of
-			{tally.crit + tally.kill + tally.tac + derivedPrimary}.
+			{interpolate(copy.confirmMessage, {
+				primary: derivedPrimary,
+				primaryValue: tally[primaryChoice],
+				total: tally.crit + tally.kill + tally.tac + derivedPrimary
+			})}
 		</p>
 		<div style="display:flex; gap:0.5rem;">
-			<button type="button" onclick={confirm}>Confirm</button>
-			<button type="button" class="button-secondary" onclick={startOver}>Start over</button>
+			<button type="button" onclick={confirm}>{copy.confirmButtonLabel}</button>
+			<button type="button" class="button-secondary" onclick={startOver}>
+				{copy.startOverButtonLabel}
+			</button>
 		</div>
 	{/if}
 
