@@ -5,7 +5,7 @@
 
 	let { onConfirm }: { onConfirm: (result: ScoreResult) => void } = $props();
 
-	type Step = 'choose-input' | 'text-entry' | 'scanning' | 'review-tally' | 'confirm';
+	type Step = 'choose-input' | 'scanning' | 'review-tally' | 'confirm';
 
 	let step = $state<Step>('choose-input');
 	let error = $state<string | null>(null);
@@ -15,6 +15,10 @@
 
 	const derivedPrimary = $derived(
 		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
+	);
+
+	const isMobile = $derived(
+		typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
 	);
 
 	async function submitScan(formData: FormData) {
@@ -105,28 +109,44 @@
 				Upload Photo
 				<input type="file" accept="image/*" onchange={handleFileChange} />
 			</label>
-			<label>
-				Take Picture
-				<input type="file" accept="image/*" capture="environment" onchange={handleFileChange} />
-			</label>
+			{#if isMobile}
+				<label>
+					Take Picture
+					<input type="file" accept="image/*" capture="environment" onchange={handleFileChange} />
+				</label>
+			{/if}
 		</div>
-		<button type="button" class="button-secondary" onclick={() => (step = 'text-entry')}>
-			Type your score instead
-		</button>
-	{:else if step === 'text-entry'}
-		<label>
-			Describe your score
+		<form
+			class="chat-input-row"
+			onsubmit={(e) => {
+				e.preventDefault();
+				submitText();
+			}}
+		>
 			<input
 				type="text"
-				placeholder="e.g. 3 crit, 2 kill, 4 tac"
+				placeholder="Type your score instead"
+				aria-label="Type your score instead"
 				bind:value={textValue}
-				onkeydown={(e) => e.key === 'Enter' && submitText()}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						submitText();
+					}
+				}}
 			/>
-		</label>
-		<div style="display:flex; gap:0.5rem;">
-			<button type="button" onclick={submitText}>Parse</button>
-			<button type="button" class="button-secondary" onclick={startOver}>Back</button>
-		</div>
+			<button type="submit" class="send-button" aria-label="Send" disabled={!textValue.trim()}>
+				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+					<path
+						d="M12 19V5M12 5L6 11M12 5l6 6"
+						stroke="currentColor"
+						stroke-width="2.4"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/>
+				</svg>
+			</button>
+		</form>
 	{:else if step === 'scanning'}
 		<p class="muted">Reading your score…</p>
 	{:else if step === 'review-tally' && tally}
@@ -152,3 +172,40 @@
 		<p class="error">{error}</p>
 	{/if}
 </div>
+
+<style>
+	.chat-input-row {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.chat-input-row input {
+		flex: 1;
+		border-radius: 999px;
+		padding: 0.6rem 1rem;
+	}
+
+	.send-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 50%;
+		border: none;
+		background: var(--color-accent);
+		color: #fff;
+		cursor: pointer;
+	}
+
+	.send-button:hover:not(:disabled) {
+		background: var(--color-masthead-dark);
+	}
+
+	.send-button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+</style>
