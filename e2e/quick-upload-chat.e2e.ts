@@ -55,7 +55,7 @@ async function fillAndSubmitMatchForm(page: Page) {
 	await expect(page).toHaveURL(/\/matches$/);
 }
 
-test('upload photo -> pick primary -> confirm math -> log match', async ({ page }) => {
+test('choose file/take photo -> pick primary -> confirm math -> log match', async ({ page }) => {
 	await loginAsMax(page);
 	await page.goto('/matches/quick-upload');
 	await mockScanResponse(page);
@@ -63,7 +63,7 @@ test('upload photo -> pick primary -> confirm math -> log match', async ({ page 
 	// Same hydration-timing gotcha as the existing scan test: the file input's
 	// change handler only exists once Svelte hydrates.
 	await page.waitForLoadState('networkidle');
-	await page.getByLabel('Upload Photo', { exact: true }).setInputFiles({
+	await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 		name: 'score-tracker.png',
 		mimeType: 'image/png',
 		buffer: sampleScoreTrackerImageBuffer()
@@ -80,22 +80,21 @@ test('upload photo -> pick primary -> confirm math -> log match', async ({ page 
 	await fillAndSubmitMatchForm(page);
 });
 
-// Functionally identical to the Upload Photo path in a test: the `capture`
-// attribute only changes which native picker a real mobile browser opens, not
-// the file input's behavior, so this exists to document that both entry
-// points reach the same working flow rather than to catch a distinct bug.
+// ScoreChat.svelte now renders a single file input (no `capture` attribute)
+// for both desktop and mobile -- the native OS picker is what offers camera
+// vs. library on a real mobile browser, not separate inputs. This exercises
+// that same single entry point under a mobile user agent to document that it
+// still reaches the working flow there.
 test.describe('on a mobile browser', () => {
-	// ScoreChat.svelte only renders the "Take Picture" entry point on mobile
-	// user agents, so this needs one to exercise that path at all.
 	test.use({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36' });
 
-	test('take picture -> pick primary -> confirm math -> log match', async ({ page }) => {
+	test('choose file/take photo -> pick primary -> confirm math -> log match', async ({ page }) => {
 		await loginAsMax(page);
 		await page.goto('/matches/quick-upload');
 		await mockScanResponse(page);
 
 		await page.waitForLoadState('networkidle');
-		await page.getByLabel('Take Picture', { exact: true }).setInputFiles({
+		await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 			name: 'score-tracker.png',
 			mimeType: 'image/png',
 			buffer: sampleScoreTrackerImageBuffer()
@@ -113,13 +112,13 @@ test.describe('at a mobile viewport width', () => {
 	// alone rather than pulling in a full device profile.
 	test.use({ viewport: { width: 375, height: 812 } });
 
-	test('quick upload page loads and the Upload Photo control stays in view', async ({ page }) => {
+	test('quick upload page loads and the Choose File / Take Photo control stays in view', async ({ page }) => {
 		await loginAsMax(page);
 		await page.goto('/matches/quick-upload');
 
 		await expect(page.getByRole('heading', { name: 'Quick Upload' })).toBeVisible();
 
-		const uploadControl = page.getByLabel('Upload Photo', { exact: true });
+		const uploadControl = page.getByLabel('Choose File / Take Photo', { exact: true });
 		await expect(uploadControl).toBeVisible();
 
 		const box = await uploadControl.boundingBox();
@@ -163,7 +162,7 @@ test('shows a friendly message once the daily scan cap is hit (demo-mode cookie)
 	]);
 
 	await page.waitForLoadState('networkidle');
-	await page.getByLabel('Upload Photo', { exact: true }).setInputFiles({
+	await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 		name: 'score-tracker.png',
 		mimeType: 'image/png',
 		buffer: sampleScoreTrackerImageBuffer()
@@ -205,7 +204,7 @@ test('shows a friendly message once the daily scan cap is hit (real-DB scanEvent
 
 		await page.goto('/matches/quick-upload');
 		await page.waitForLoadState('networkidle');
-		await page.getByLabel('Upload Photo', { exact: true }).setInputFiles({
+		await page.getByLabel('Choose File / Take Photo', { exact: true }).setInputFiles({
 			name: 'score-tracker.png',
 			mimeType: 'image/png',
 			buffer: sampleScoreTrackerImageBuffer()
