@@ -99,7 +99,7 @@ const STRICT = process.env.LD_TRAFFIC === '1';
 // and context teardown drop them on the floor.
 const EVENT_FLUSH_MS = 2500;
 
-test.describe('random users click Matchmake Now', () => {
+test.describe('random users click Matchmake Now', { tag: '@traffic' }, () => {
 	for (const account of randomSample(ALL_ACCOUNTS, SAMPLE_SIZE)) {
 		test(`${account.name} (${account.email}) clicks Matchmake Now if it is shown`, async ({
 			page

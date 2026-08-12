@@ -26,11 +26,6 @@ const HEADED = process.argv.includes('--headed');
 export default defineConfig({
 	webServer: { command: 'npm run build && npm run preview', port: 4173, reuseExistingServer: !process.env.CI },
 	testMatch: '**/*.e2e.{ts,js}',
-	// e2e/traffic holds tests whose purpose is generating LaunchDarkly traffic
-	// (see e2e/traffic/matchmake-random-users.e2e.ts) rather than verifying
-	// behaviour -- CI sets SKIP_TRAFFIC_TESTS so its regular runs don't send
-	// that traffic on every push/PR.
-	testIgnore: process.env.SKIP_TRAFFIC_TESTS ? '**/traffic/**' : undefined,
 	globalSetup: './e2e/global-setup.ts',
 	workers: HEADED ? 4 : 5,
 	// 10 concurrent workers can outpace the single `npm run preview` process

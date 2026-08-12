@@ -41,8 +41,6 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-        env:
-          SKIP_TRAFFIC_TESTS: true
 
   # Database mode: real Postgres + seed. DATABASE_URL is set, so the config skips
   # .env.demo and the app runs against the database with real auth (the login /
@@ -76,9 +74,10 @@ jobs:
       # that traffic was sent.
       #
       # The bulk traffic generator (e2e/traffic/matchmake-random-users.e2e.ts,
-      # which samples 25 accounts) is excluded from this job via
-      # SKIP_TRAFFIC_TESTS below -- it's meant to be run deliberately, not on
-      # every push/PR.
+      # 25 accounts, tagged @traffic) is excluded by `npm run test:e2e`
+      # itself (see package.json's --grep-invert @traffic), so it doesn't run
+      # here on every push/PR -- run it deliberately with
+      # `npm run test:e2e:traffic`.
       PUBLIC_LD_CLIENT_ID: ${{ secrets.PUBLIC_LD_CLIENT_ID }}
 
     steps:
