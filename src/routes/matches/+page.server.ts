@@ -1,17 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { desc, eq, ne, or, sql } from 'drizzle-orm';
+import { desc, eq, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Actions, PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { match, team, tournament, user, userProfile } from '$lib/server/db/schema';
-import {
-	addDemoMatch,
-	getDemoOpponents,
-	getDemoTeams,
-	getDemoTournamentOptions,
-	getDemoUserMatchRows
-} from '$lib/server/demo/data';
+import { addDemoMatch, getDemoUserMatchRows } from '$lib/server/demo/data';
+import { getMatchFormOptions } from '$lib/server/matchFormOptions';
 import { outcomeFor, totalScore, type PrimaryOpChoice } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
@@ -27,20 +22,7 @@ export const load: PageServerLoad = async (event) => {
 		return redirect(302, '/login');
 	}
 
-	const teams = DEMO_MODE ? getDemoTeams() : await db.select().from(team).orderBy(team.name);
-	const opponents = DEMO_MODE
-		? getDemoOpponents(currentUser.id)
-		: await db
-				.select({ id: user.id, name: user.name })
-				.from(user)
-				.where(ne(user.id, currentUser.id))
-				.orderBy(user.name);
-	const tournaments = DEMO_MODE
-		? getDemoTournamentOptions()
-		: await db
-				.select({ id: tournament.id, name: tournament.name })
-				.from(tournament)
-				.orderBy(desc(tournament.startDate));
+	const { teams, opponents, tournaments } = await getMatchFormOptions(currentUser.id);
 
 	const rows = DEMO_MODE
 		? await getDemoUserMatchRows(currentUser.id)

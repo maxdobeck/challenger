@@ -1,31 +1,45 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import ScorePhotoScan from '$lib/components/ScorePhotoScan.svelte';
+	import ScoreChat from '$lib/components/ScoreChat.svelte';
 	import TournamentCombobox from '$lib/components/TournamentCombobox.svelte';
-	import type { ActionData, PageServerData } from './$types';
+	import type { PageServerData } from './$types';
 
-	let { data, form }: { data: PageServerData; form: ActionData } = $props();
+	let { data }: { data: PageServerData } = $props();
 
-	let player1 = $state({ crit: 0, tac: 0, kill: 0 });
-	let player2 = $state({ crit: 0, tac: 0, kill: 0 });
-
-	function formatDate(d: string | Date) {
-		return new Date(d).toLocaleDateString(undefined, {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric'
-		});
-	}
+	let player1 = $state({ crit: 0, tac: 0, kill: 0, primary: 0, primaryOpChoice: '' });
+	let player2 = $state({ crit: 0, tac: 0, kill: 0, primary: 0 });
+	let submitError = $state<string | null>(null);
 </script>
 
-<h1>Log a Match</h1>
+<h1>Quick Upload</h1>
+<p class="muted">Scan a photo of your score tracker, or describe it — then confirm to log the match.</p>
 
-<p>
-	<a href={resolve('/matches/quick-upload')} class="button-secondary">Quick Upload</a>
-</p>
+<ScoreChat
+	onConfirm={(result) => {
+		player1.crit = result.crit;
+		player1.kill = result.kill;
+		player1.tac = result.tac;
+		player1.primary = result.primary;
+		player1.primaryOpChoice = result.primaryOpChoice;
+	}}
+/>
 
-<form class="stack card" method="post" action="?/logMatch" use:enhance>
+<form
+	class="stack card"
+	method="post"
+	action="/matches?/logMatch"
+	use:enhance={() => {
+		return async ({ result }) => {
+			if (result.type === 'success') {
+				await goto(resolve('/matches'));
+			} else if (result.type === 'failure') {
+				submitError = (result.data?.message as string) ?? 'Could not log the match.';
+			}
+		};
+	}}
+>
 	<label>
 		Opponent
 		<select name="opponentId" required>
@@ -67,17 +81,10 @@
 				</label>
 				<label style="flex:1;">
 					Primary (0-3)
-					<input type="number" name="player1Primary" min="0" max="3" value="0" />
+					<input type="number" name="player1Primary" min="0" max="3" bind:value={player1.primary} />
 				</label>
 			</div>
-			<ScorePhotoScan
-				groupName="You"
-				onApply={(scores) => {
-					player1.crit = scores.crit;
-					player1.kill = scores.kill;
-					player1.tac = scores.tac;
-				}}
-			/>
+			<input type="hidden" name="player1PrimaryOpChoice" value={player1.primaryOpChoice} />
 		</fieldset>
 
 		<fieldset style="flex:1; min-width:220px; border:1px solid var(--color-border); border-radius:6px;">
@@ -106,57 +113,14 @@
 				</label>
 				<label style="flex:1;">
 					Primary (0-3)
-					<input type="number" name="player2Primary" min="0" max="3" value="0" />
+					<input type="number" name="player2Primary" min="0" max="3" bind:value={player2.primary} />
 				</label>
 			</div>
-			<ScorePhotoScan
-				groupName="Opponent"
-				onApply={(scores) => {
-					player2.crit = scores.crit;
-					player2.kill = scores.kill;
-					player2.tac = scores.tac;
-				}}
-			/>
 		</fieldset>
 	</div>
 
 	<button type="submit">Log match</button>
+	{#if submitError}
+		<p class="error">{submitError}</p>
+	{/if}
 </form>
-
-{#if form?.message}
-	<p class="error">{form.message}</p>
-{/if}
-
-<h2>Your match history</h2>
-{#if data.matches.length === 0}
-	<p class="muted">No matches logged yet — add your first one above.</p>
-{:else}
-	<table>
-		<thead>
-			<tr>
-				<th>Date</th>
-				<th>You</th>
-				<th>Opponent</th>
-				<th>Result</th>
-				<th>Score</th>
-				<th>Tournament</th>
-			</tr>
-		</thead>
-		<tbody>
-			{#each data.matches as m (m.id)}
-				<tr>
-					<td>{formatDate(m.playedAt)}</td>
-					<td>{m.you.team} <span class="muted">({m.yourTotal} VP)</span></td>
-					<td
-						>{m.opponent.team} <span class="muted"
-							>({m.opponent.name}, {m.opponentTotal} VP)</span
-						></td
-					>
-					<td class="result-{m.result}">{m.result}</td>
-					<td>{m.yourTotal} - {m.opponentTotal}</td>
-					<td>{m.tournament ?? '—'}</td>
-				</tr>
-			{/each}
-		</tbody>
-	</table>
-{/if}
