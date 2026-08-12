@@ -2,8 +2,8 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import ScoreChat from '$lib/components/ScoreChat.svelte';
-	import TournamentCombobox from '$lib/components/TournamentCombobox.svelte';
 	import type { PageServerData } from './$types';
 
 	let { data }: { data: PageServerData } = $props();
@@ -42,16 +42,11 @@
 >
 	<label>
 		Opponent
-		<select name="opponentId" required>
-			<option value="" disabled selected>Select an opponent</option>
-			{#each data.opponents as o (o.id)}
-				<option value={o.id}>{o.name}</option>
-			{/each}
-		</select>
+		<Combobox items={data.opponents} name="opponentId" placeholder="Search opponents…" required />
 	</label>
 	<label>
 		Tournament <span class="muted">(optional)</span>
-		<TournamentCombobox tournaments={data.tournaments} name="tournamentId" />
+		<Combobox items={data.tournaments} name="tournamentId" placeholder="Search tournaments…" />
 	</label>
 
 	<div style="display:flex; gap:1.5rem; flex-wrap:wrap;">

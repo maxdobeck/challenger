@@ -1,25 +1,24 @@
-<script lang="ts">
+<script lang="ts" generics="T extends { id: string | number; name: string }">
 	import Fuse from 'fuse.js';
 
-	type Tournament = { id: number; name: string };
-
 	let {
-		tournaments,
-		name = 'tournamentId',
-		placeholder = 'Search tournaments…'
-	}: { tournaments: Tournament[]; name?: string; placeholder?: string } = $props();
+		items,
+		name,
+		placeholder = 'Search…',
+		required = false
+	}: { items: T[]; name: string; placeholder?: string; required?: boolean } = $props();
 
 	let query = $state('');
-	let selectedId = $state<number | null>(null);
+	let selectedId = $state<T['id'] | null>(null);
 	let open = $state(false);
 	let activeIndex = $state(0);
 
-	const fuse = $derived(new Fuse(tournaments, { keys: ['name'], threshold: 0.4 }));
-	const results = $derived(query.trim() ? fuse.search(query).map((r) => r.item) : tournaments);
+	const fuse = $derived(new Fuse(items, { keys: ['name'], threshold: 0.4 }));
+	const results = $derived(query.trim() ? fuse.search(query).map((r) => r.item) : items);
 
-	function select(t: Tournament) {
-		selectedId = t.id;
-		query = t.name;
+	function select(item: T) {
+		selectedId = item.id;
+		query = item.name;
 		open = false;
 	}
 
@@ -62,7 +61,7 @@
 </script>
 
 <div class="combobox" {@attach closeOnOutsideClick}>
-	<input type="hidden" {name} value={selectedId ?? ''} />
+	<input type="hidden" {name} value={selectedId ?? ''} {required} />
 	<input
 		type="text"
 		class="combobox-input"
@@ -78,15 +77,15 @@
 	/>
 	{#if open && results.length > 0}
 		<ul class="combobox-list" id="{name}-listbox" role="listbox">
-			{#each results as t, i (t.id)}
-				<li role="option" aria-selected={selectedId === t.id}>
+			{#each results as item, i (item.id)}
+				<li role="option" aria-selected={selectedId === item.id}>
 					<button
 						type="button"
 						class="combobox-option {i === activeIndex ? 'active' : ''}"
-						onclick={() => select(t)}
+						onclick={() => select(item)}
 						onmouseenter={() => (activeIndex = i)}
 					>
-						{t.name}
+						{item.name}
 					</button>
 				</li>
 			{/each}
