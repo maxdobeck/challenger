@@ -17,10 +17,6 @@
 		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
 	);
 
-	const isMobile = $derived(
-		typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-	);
-
 	async function submitScan(formData: FormData) {
 		step = 'scanning';
 		error = null;
@@ -105,18 +101,10 @@
 	{#if step === 'choose-input'}
 		<p>How do you want to log your score?</p>
 		<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-			{#if !isMobile}
-				<label>
-					Upload Photo
-					<input type="file" accept="image/*" onchange={handleFileChange} />
-				</label>
-			{/if}
-			{#if isMobile}
-				<label>
-					Take Picture
-					<input type="file" accept="image/*" capture="environment" onchange={handleFileChange} />
-				</label>
-			{/if}
+			<label>
+				Choose File / Take Photo
+				<input type="file" accept="image/*" onchange={handleFileChange} />
+			</label>
 		</div>
 		<form
 			class="chat-input-row"
