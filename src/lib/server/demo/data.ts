@@ -421,6 +421,22 @@ export function getDemoTournamentDetail(id: number) {
 	return { tournament, attendees, matchRows };
 }
 
+// In-memory AI score-scan log for demo mode, mirroring the real `score_scan`
+// table well enough to drive the same rolling-24h rate limit.
+type DemoScoreScan = { userId: string; status: 'success' | 'error'; createdAt: Date };
+const demoScoreScans: DemoScoreScan[] = [];
+const DEMO_SCAN_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export function recordDemoScan(userId: string, status: 'success' | 'error'): void {
+	demoScoreScans.push({ userId, status, createdAt: new Date() });
+}
+
+export function countRecentDemoScans(userId: string): number {
+	const cutoff = Date.now() - DEMO_SCAN_WINDOW_MS;
+	return demoScoreScans.filter((s) => s.userId === userId && s.createdAt.getTime() > cutoff)
+		.length;
+}
+
 let nextTournamentId = DEMO_TOURNAMENT_COUNT + 1;
 
 // In-memory tournament create for demo mode — mirrors tournaments/new create action.

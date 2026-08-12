@@ -85,4 +85,19 @@ export const userProfile = pgTable('user_profile', {
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
 
+// One row per AI score-scan attempt (success or failure). Doubles as the
+// abuse-prevention log: the scan endpoint counts a user's rows from the last
+// 24 hours to enforce the daily cap, so failed attempts count too.
+export const scoreScan = pgTable('score_scan', {
+	id: serial('id').primaryKey(),
+	userId: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	status: text('status').notNull(), // 'success' | 'error'
+	critOp: integer('crit_op'),
+	killOp: integer('kill_op'),
+	tacOp: integer('tac_op'),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
+});
+
 export * from './auth.schema';
