@@ -11,6 +11,11 @@ export type ScoreSet = {
 	primary: number;
 };
 
+// Which category a player designated as their Primary Op — distinct from `primary`
+// above, which is the derived 0-3 score. Recorded separately so the choice itself
+// (not just the number it produced) survives in match history.
+export type PrimaryOpChoice = 'crit' | 'kill' | 'tac';
+
 export function totalScore(score: ScoreSet): number {
 	return score.crit + score.tac + score.kill + score.primary;
 }

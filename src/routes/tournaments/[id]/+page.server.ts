@@ -30,7 +30,7 @@ export const load: PageServerLoad = async (event) => {
 	let matchRows;
 
 	if (DEMO_MODE) {
-		const detail = getDemoTournamentDetail(id);
+		const detail = await getDemoTournamentDetail(id);
 		if (!detail) {
 			return error(404, 'Tournament not found');
 		}

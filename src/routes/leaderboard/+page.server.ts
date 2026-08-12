@@ -21,7 +21,7 @@ export const load: PageServerLoad = async (event) => {
 	}
 
 	const rows = DEMO_MODE
-		? getDemoLeaderboardRows()
+		? await getDemoLeaderboardRows()
 		: await db
 				.select({
 					player1Id: match.player1Id,
