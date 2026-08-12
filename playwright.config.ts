@@ -16,11 +16,19 @@ if (!process.env.DATABASE_URL && existsSync('.env.demo')) {
 	process.loadEnvFile('.env.demo');
 }
 
+// `--headed` renders every worker as a full, GPU-composited browser window
+// instead of a background process. 10 of those competing on a 10-core
+// machine starves whichever window's turn is late, producing real
+// (non-application) timeouts on effectively random tests. Headless workers
+// are cheap enough that 10 is fine; cap headed runs well below the core
+// count so each window actually gets scheduled promptly.
+const HEADED = process.argv.includes('--headed');
+
 export default defineConfig({
 	webServer: { command: 'npm run build && npm run preview', port: 4173, reuseExistingServer: !process.env.CI },
 	testMatch: '**/*.e2e.{ts,js}',
 	globalSetup: './e2e/global-setup.ts',
-	workers: 10,
+	workers: HEADED ? 4 : 10,
 	// 10 concurrent workers can outpace the single `npm run preview` process
 	// (occasional ERR_CONNECTION_REFUSED under the burst of simultaneous
 	// logins) -- retry on CI to absorb that without masking real failures
