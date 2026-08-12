@@ -21,8 +21,8 @@
 
 <h1>Log a Match</h1>
 
-<p>
-	<a href={resolve('/matches/quick-upload')} class="button-secondary">Quick Upload</a>
+<p class="quick-upload-row">
+	<a href={resolve('/matches/quick-upload')} class="button-quick-upload"><em>Quick</em> Upload</a>
 </p>
 
 <form class="stack card" method="post" action="?/logMatch" use:enhance>
