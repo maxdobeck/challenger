@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchOutcome, outcomeFor, pickBestTeam, totalScore, winRate } from './scoring';
+import { derivePrimary, matchOutcome, outcomeFor, pickBestTeam, totalScore, winRate } from './scoring';
 
 describe('totalScore', () => {
 	it('sums all four score categories', () => {
@@ -8,6 +8,28 @@ describe('totalScore', () => {
 
 	it('handles an all-zero score set', () => {
 		expect(totalScore({ crit: 0, tac: 0, kill: 0, primary: 0 })).toBe(0);
+	});
+});
+
+describe('derivePrimary', () => {
+	it('rounds up half of the chosen category', () => {
+		expect(derivePrimary('crit', { crit: 5, kill: 0, tac: 0 })).toBe(3);
+	});
+
+	it('divides an even category exactly', () => {
+		expect(derivePrimary('kill', { crit: 0, kill: 4, tac: 0 })).toBe(2);
+	});
+
+	it('is zero when the chosen category is zero', () => {
+		expect(derivePrimary('tac', { crit: 0, kill: 0, tac: 0 })).toBe(0);
+	});
+
+	it('caps at 3 for the maximum category value of 6', () => {
+		expect(derivePrimary('crit', { crit: 6, kill: 0, tac: 0 })).toBe(3);
+	});
+
+	it('only looks at the chosen category, not the others', () => {
+		expect(derivePrimary('kill', { crit: 6, kill: 1, tac: 6 })).toBe(1);
 	});
 });
 

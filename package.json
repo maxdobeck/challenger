@@ -56,7 +56,10 @@
 		"vitest": "^4.1.10"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.116.0",
+		"@launchdarkly/node-server-sdk": "^9.13.0",
 		"@launchdarkly/observability": "^1.1.18",
+		"@launchdarkly/server-sdk-ai": "^2.0.0",
 		"@launchdarkly/session-replay": "^1.1.18",
 		"@upstash/redis": "^1.38.2",
 		"fuse.js": "^7.5.0",

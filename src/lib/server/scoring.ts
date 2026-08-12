@@ -20,6 +20,12 @@ export function totalScore(score: ScoreSet): number {
 	return score.crit + score.tac + score.kill + score.primary;
 }
 
+// Derives the 0-3 Primary Op score from whichever category (crit/kill/tac)
+// the player chose as their Primary, per the documented Kill Team rule.
+export function derivePrimary(category: PrimaryOpChoice, values: Pick<ScoreSet, PrimaryOpChoice>): number {
+	return Math.ceil(values[category] / 2);
+}
+
 export type Outcome = 'win' | 'loss' | 'draw';
 
 // Outcome from the perspective of the player whose total is `yourTotal`.
