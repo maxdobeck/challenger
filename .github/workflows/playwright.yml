@@ -41,6 +41,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+        env:
+          SKIP_TRAFFIC_TESTS: true
 
   # Database mode: real Postgres + seed. DATABASE_URL is set, so the config skips
   # .env.demo and the app runs against the database with real auth (the login /
@@ -65,12 +67,18 @@ jobs:
       DATABASE_URL: postgres://root:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/local
       ORIGIN: http://localhost:4173
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-      # Points at the production LD environment on purpose: this job's traffic
-      # is meant to feed the `social-matchmake-cta` experiment. Stored as a
-      # secret (it's a client-side ID, so not actually sensitive -- a repo
-      # variable would do just as well and would show unmasked in logs).
-      # If it's unset, initLD() silently no-ops and the job still passes -- so
-      # a green run is not on its own proof that traffic was sent.
+      # Points at the production LD environment on purpose: the login /
+      # matchmake tests that run here still identify real subjects against
+      # `social-matchmake-cta`. Stored as a secret (it's a client-side ID, so
+      # not actually sensitive -- a repo variable would do just as well and
+      # would show unmasked in logs). If it's unset, initLD() silently no-ops
+      # and the job still passes -- so a green run is not on its own proof
+      # that traffic was sent.
+      #
+      # The bulk traffic generator (e2e/traffic/matchmake-random-users.e2e.ts,
+      # which samples 25 accounts) is excluded from this job via
+      # SKIP_TRAFFIC_TESTS below -- it's meant to be run deliberately, not on
+      # every push/PR.
       PUBLIC_LD_CLIENT_ID: ${{ secrets.PUBLIC_LD_CLIENT_ID }}
 
     steps:
@@ -86,3 +94,5 @@ jobs:
       - run: npm run db:migrate
       - run: npm run db:seed
       - run: npm run test:e2e
+        env:
+          SKIP_TRAFFIC_TESTS: true

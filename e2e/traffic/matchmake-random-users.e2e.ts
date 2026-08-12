@@ -7,8 +7,8 @@ import {
 	CASUAL_PLAYERS,
 	killteamEmail,
 	DEMO_LOGIN_PASSWORD
-} from '../src/lib/server/db/demo-fixtures';
-import { signOut, waitForLdIdentified } from './helpers';
+} from '../../src/lib/server/db/demo-fixtures';
+import { signOut, waitForLdIdentified } from '../helpers';
 
 // Every login-capable account in either mode: the 3 fixed accounts plus all
 // of FAKE_PLAYERS (seeded by seed.ts in real-auth mode, and mirrored 1:1 in
