@@ -7,7 +7,7 @@ import { db } from '$lib/server/db';
 import { match, team, tournament, user, userProfile } from '$lib/server/db/schema';
 import { addDemoMatch, getDemoUserMatchRows } from '$lib/server/demo/data';
 import { getMatchFormOptions } from '$lib/server/matchFormOptions';
-import { outcomeFor, totalScore, type PrimaryOpChoice } from '$lib/server/scoring';
+import { derivePrimary, outcomeFor, totalScore, type PrimaryOpChoice } from '$lib/server/scoring';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -128,22 +128,43 @@ export const actions: Actions = {
 			return fail(400, { message: 'Opponent and both teams are required.' });
 		}
 
+		const player1PrimaryOpChoice = parsePrimaryOpChoice(formData, 'player1PrimaryOpChoice');
+		const player2PrimaryOpChoice = parsePrimaryOpChoice(formData, 'player2PrimaryOpChoice');
+		if (!player1PrimaryOpChoice || !player2PrimaryOpChoice) {
+			return fail(400, { message: 'Choose a Primary Op for both players.' });
+		}
+
+		const player1Crit = parseScore(formData, 'player1Crit');
+		const player1Tac = parseScore(formData, 'player1Tac');
+		const player1Kill = parseScore(formData, 'player1Kill');
+		const player2Crit = parseScore(formData, 'player2Crit');
+		const player2Tac = parseScore(formData, 'player2Tac');
+		const player2Kill = parseScore(formData, 'player2Kill');
+
 		const values = {
 			player1Id: currentUser.id,
 			player2Id: opponentId,
 			player1TeamId,
 			player2TeamId,
 			tournamentId,
-			player1Crit: parseScore(formData, 'player1Crit'),
-			player1Tac: parseScore(formData, 'player1Tac'),
-			player1Kill: parseScore(formData, 'player1Kill'),
-			player1Primary: parseScore(formData, 'player1Primary'),
-			player1PrimaryOpChoice: parsePrimaryOpChoice(formData, 'player1PrimaryOpChoice'),
-			player2Crit: parseScore(formData, 'player2Crit'),
-			player2Tac: parseScore(formData, 'player2Tac'),
-			player2Kill: parseScore(formData, 'player2Kill'),
-			player2Primary: parseScore(formData, 'player2Primary'),
-			player2PrimaryOpChoice: parsePrimaryOpChoice(formData, 'player2PrimaryOpChoice')
+			player1Crit,
+			player1Tac,
+			player1Kill,
+			player1Primary: derivePrimary(player1PrimaryOpChoice, {
+				crit: player1Crit,
+				tac: player1Tac,
+				kill: player1Kill
+			}),
+			player1PrimaryOpChoice,
+			player2Crit,
+			player2Tac,
+			player2Kill,
+			player2Primary: derivePrimary(player2PrimaryOpChoice, {
+				crit: player2Crit,
+				tac: player2Tac,
+				kill: player2Kill
+			}),
+			player2PrimaryOpChoice
 		};
 
 		if (DEMO_MODE) {

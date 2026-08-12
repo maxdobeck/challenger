@@ -7,8 +7,20 @@
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
-	let player1 = $state({ crit: 0, tac: 0, kill: 0 });
-	let player2 = $state({ crit: 0, tac: 0, kill: 0 });
+	type Category = 'crit' | 'tac' | 'kill';
+	type PlayerScores = { crit: number; tac: number; kill: number; primaryOpChoice: Category | '' };
+
+	let player1 = $state<PlayerScores>({ crit: 0, tac: 0, kill: 0, primaryOpChoice: '' });
+	let player2 = $state<PlayerScores>({ crit: 0, tac: 0, kill: 0, primaryOpChoice: '' });
+
+	function derivedPrimary(p: PlayerScores) {
+		return p.primaryOpChoice ? Math.ceil(p[p.primaryOpChoice] / 2) : 0;
+	}
+
+	const player1Primary = $derived(derivedPrimary(player1));
+	const player2Primary = $derived(derivedPrimary(player2));
+	const player1Total = $derived(player1.crit + player1.tac + player1.kill + player1Primary);
+	const player2Total = $derived(player2.crit + player2.tac + player2.kill + player2Primary);
 
 	function formatDate(d: string | Date) {
 		return new Date(d).toLocaleDateString(undefined, {
@@ -63,11 +75,23 @@
 					Kill (0-6)
 					<input type="number" name="player1Kill" min="0" max="6" bind:value={player1.kill} />
 				</label>
-				<label style="flex:1;">
-					Primary (0-3)
-					<input type="number" name="player1Primary" min="0" max="3" value="0" />
-				</label>
 			</div>
+			<div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end;">
+				<label style="flex:1; min-width:140px;">
+					Primary Op
+					<select name="player1PrimaryOpChoice" bind:value={player1.primaryOpChoice} required>
+						<option value="" disabled>Choose…</option>
+						<option value="crit">Crit</option>
+						<option value="tac">Tac</option>
+						<option value="kill">Kill</option>
+					</select>
+				</label>
+				<div class="score-readout" style="flex:1; min-width:100px;">
+					Primary (0-3)
+					<div class="derived-score">{player1Primary}</div>
+				</div>
+			</div>
+			<p class="muted" style="margin:0;">Total: <strong>{player1Total}</strong></p>
 			<ScorePhotoScan
 				groupName="You"
 				onApply={(scores) => {
@@ -97,11 +121,23 @@
 					Kill (0-6)
 					<input type="number" name="player2Kill" min="0" max="6" bind:value={player2.kill} />
 				</label>
-				<label style="flex:1;">
-					Primary (0-3)
-					<input type="number" name="player2Primary" min="0" max="3" value="0" />
-				</label>
 			</div>
+			<div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end;">
+				<label style="flex:1; min-width:140px;">
+					Primary Op
+					<select name="player2PrimaryOpChoice" bind:value={player2.primaryOpChoice} required>
+						<option value="" disabled>Choose…</option>
+						<option value="crit">Crit</option>
+						<option value="tac">Tac</option>
+						<option value="kill">Kill</option>
+					</select>
+				</label>
+				<div class="score-readout" style="flex:1; min-width:100px;">
+					Primary (0-3)
+					<div class="derived-score">{player2Primary}</div>
+				</div>
+			</div>
+			<p class="muted" style="margin:0;">Total: <strong>{player2Total}</strong></p>
 			<ScorePhotoScan
 				groupName="Opponent"
 				onApply={(scores) => {

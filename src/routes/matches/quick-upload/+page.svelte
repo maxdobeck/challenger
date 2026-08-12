@@ -8,9 +8,23 @@
 
 	let { data }: { data: PageServerData } = $props();
 
+	type Category = 'crit' | 'tac' | 'kill';
+
 	let player1 = $state({ crit: 0, tac: 0, kill: 0, primary: 0, primaryOpChoice: '' });
-	let player2 = $state({ crit: 0, tac: 0, kill: 0, primary: 0 });
+	let player2 = $state<{ crit: number; tac: number; kill: number; primaryOpChoice: Category | '' }>({
+		crit: 0,
+		tac: 0,
+		kill: 0,
+		primaryOpChoice: ''
+	});
 	let submitError = $state<string | null>(null);
+
+	function derivedPrimary(p: { crit: number; tac: number; kill: number; primaryOpChoice: Category | '' }) {
+		return p.primaryOpChoice ? Math.ceil(p[p.primaryOpChoice] / 2) : 0;
+	}
+
+	const player2Primary = $derived(derivedPrimary(player2));
+	const player2Total = $derived(player2.crit + player2.tac + player2.kill + player2Primary);
 </script>
 
 <h1>Quick Upload</h1>
@@ -96,11 +110,23 @@
 					Kill (0-6)
 					<input type="number" name="player2Kill" min="0" max="6" bind:value={player2.kill} />
 				</label>
-				<label style="flex:1;">
-					Primary (0-3)
-					<input type="number" name="player2Primary" min="0" max="3" bind:value={player2.primary} />
-				</label>
 			</div>
+			<div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end;">
+				<label style="flex:1; min-width:140px;">
+					Primary Op
+					<select name="player2PrimaryOpChoice" bind:value={player2.primaryOpChoice} required>
+						<option value="" disabled>Choose…</option>
+						<option value="crit">Crit</option>
+						<option value="tac">Tac</option>
+						<option value="kill">Kill</option>
+					</select>
+				</label>
+				<div class="score-readout" style="flex:1; min-width:100px;">
+					Primary (0-3)
+					<div class="derived-score">{player2Primary}</div>
+				</div>
+			</div>
+			<p class="muted" style="margin:0;">Total: <strong>{player2Total}</strong></p>
 		</fieldset>
 	</div>
 

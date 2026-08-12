@@ -317,6 +317,22 @@ textarea {
 	color: var(--color-text);
 }
 
+.score-readout {
+	display: flex;
+	flex-direction: column;
+	gap: 0.3rem;
+	font-size: 0.85rem;
+	color: var(--color-text-muted);
+}
+
+.derived-score {
+	padding: 0.5rem 0.6rem;
+	border: 1px solid var(--color-border);
+	border-radius: 2px;
+	font-size: 1rem;
+	color: var(--color-text);
+}
+
 input::placeholder,
 textarea::placeholder {
 	color: #4a4a4a;
