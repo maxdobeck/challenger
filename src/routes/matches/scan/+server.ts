@@ -9,7 +9,7 @@ import { isThrottledByCookie, recordScanInCookie } from '$lib/server/scanThrottl
 import { getUserProfile, DEFAULT_PROFILE } from '$lib/server/users';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 // Records the attempt against the daily cap regardless of outcome -- a failed
 // scan still cost a model call (or would have, once real keys are set), so
