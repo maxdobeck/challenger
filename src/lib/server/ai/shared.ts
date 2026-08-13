@@ -59,11 +59,19 @@ export async function runScoreCompletion(
 ): Promise<ScoreScanResult> {
 	const context = buildServerContext(user, profile);
 	const aiClient = await getAiClient();
+	// See runScoreChatTurn for why the provider is named here rather than left
+	// to the SDK's fallback walk.
 	const aiConfig = aiClient
-		? await aiClient.completionConfig(aiConfigKey, context, {
-				model: { name: defaultModel },
-				messages: [{ role: 'system', content: defaultPrompt }]
-			})
+		? await aiClient.completionConfig(
+				aiConfigKey,
+				context,
+				{
+					model: { name: defaultModel },
+					messages: [{ role: 'system', content: defaultPrompt }]
+				},
+				undefined,
+				'vercel'
+			)
 		: null;
 	const tracker = aiConfig?.createTracker();
 
