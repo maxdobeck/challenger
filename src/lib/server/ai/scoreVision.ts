@@ -14,7 +14,7 @@ const SUPPORTED_MEDIA_TYPES: readonly SupportedMediaType[] = [
 // The client always sends image/jpeg post-downscale (see $lib/imageDownscale);
 // fall back to it for any missing/unrecognized type (e.g. a direct API
 // bypass) rather than mislabeling arbitrary bytes as PNG.
-function resolveMediaType(blob: Blob): SupportedMediaType {
+export function resolveMediaType(blob: Blob): SupportedMediaType {
 	return SUPPORTED_MEDIA_TYPES.includes(blob.type as SupportedMediaType)
 		? (blob.type as SupportedMediaType)
 		: 'image/jpeg';

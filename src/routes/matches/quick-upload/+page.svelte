@@ -28,15 +28,41 @@
 </script>
 
 <h1>Quick Upload</h1>
-<p class="muted">Scan a photo of your score tracker, or describe it — then confirm to log the match.</p>
+<p class="muted">
+	Chat through both players' scores — send a photo or describe them — then confirm to log the match.
+</p>
 
 <ScoreChat
+	onUpdate={(draft) => {
+		// Fires every turn with whatever the conversation has established so
+		// far. A null side is one the model hasn't read yet, so leave those
+		// fields untouched instead of zeroing them back out.
+		if (draft.you) {
+			player1.crit = draft.you.crit;
+			player1.kill = draft.you.kill;
+			player1.tac = draft.you.tac;
+			player1.primary = draft.you.primary;
+			if (draft.you.primaryOpChoice) player1.primaryOpChoice = draft.you.primaryOpChoice;
+		}
+		if (draft.opponent) {
+			player2.crit = draft.opponent.crit;
+			player2.kill = draft.opponent.kill;
+			player2.tac = draft.opponent.tac;
+			// player2's Primary is derived from primaryOpChoice on this page,
+			// so setting the choice is what fills its readout.
+			if (draft.opponent.primaryOpChoice) player2.primaryOpChoice = draft.opponent.primaryOpChoice;
+		}
+	}}
 	onConfirm={(result) => {
-		player1.crit = result.crit;
-		player1.kill = result.kill;
-		player1.tac = result.tac;
-		player1.primary = result.primary;
-		player1.primaryOpChoice = result.primaryOpChoice;
+		player1.crit = result.you.crit;
+		player1.kill = result.you.kill;
+		player1.tac = result.you.tac;
+		player1.primary = result.you.primary;
+		player1.primaryOpChoice = result.you.primaryOpChoice;
+		player2.crit = result.opponent.crit;
+		player2.kill = result.opponent.kill;
+		player2.tac = result.opponent.tac;
+		player2.primaryOpChoice = result.opponent.primaryOpChoice;
 	}}
 />
 
