@@ -1,5 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { LDFeedbackKind } from '@launchdarkly/server-sdk-ai';
+import {
+	LDFeedbackKind,
+	type LDAIClient,
+	type LDAIConfigTracker,
+	type LDJudge
+} from '@launchdarkly/server-sdk-ai';
+import type { LDContext } from '@launchdarkly/node-server-sdk';
 import { env } from '$env/dynamic/private';
 import { getAiClient } from './ldClient';
 import { buildServerContext, type ServerLDUser, type ServerLDProfile } from './context';
@@ -80,6 +86,29 @@ const SCORE_CHAT_TOOL = {
 		required: ['reply', 'you', 'opponent']
 	}
 } satisfies Anthropic.Tool;
+
+// Judges score a reply on a 0-1 scale. Same forced-tool trick as the score
+// tool: a structured result beats parsing a number out of prose.
+const JUDGE_TOOL = {
+	name: 'record_evaluation',
+	description: 'Record the evaluation score and the reasoning behind it.',
+	input_schema: {
+		type: 'object',
+		properties: {
+			score: { type: 'number', description: 'Score between 0.0 and 1.0, per the rubric.' },
+			reasoning: { type: 'string', description: 'Brief justification for the score.' }
+		},
+		required: ['score', 'reasoning']
+	}
+} satisfies Anthropic.Tool;
+
+// LaunchDarkly's model catalog keys models as "<Provider>.<model>" (e.g.
+// "Anthropic.claude-sonnet-4-5"). The SDK normally hands back the bare API id
+// in model.name, but strip the prefix defensively -- Anthropic rejects the
+// catalog form, and the failure would surface as an opaque 502.
+function toAnthropicModel(name: string | undefined, fallback: string): string {
+	return (name || fallback).replace(/^[A-Za-z]+\./, '');
+}
 
 function parseCategory(value: unknown): Category | null {
 	return typeof value === 'string' && CATEGORIES.includes(value as Category)
@@ -171,6 +200,114 @@ export function sanitizeHistory(raw: unknown): Anthropic.Messages.MessageParam[]
 	return start === -1 ? [] : messages.slice(start);
 }
 
+// Renders the conversation as plain "role: text" lines for a judge to read.
+// Image and tool_use/tool_result blocks are dropped -- a judge is scoring the
+// assistant's words, and the raw blocks are noise it can't use.
+function renderHistory(messages: Anthropic.Messages.MessageParam[]): string {
+	return messages
+		.map((message) => {
+			const text =
+				typeof message.content === 'string'
+					? message.content
+					: message.content
+							.filter((block) => block.type === 'text')
+							.map((block) => (block as Anthropic.Messages.TextBlockParam).text)
+							.join(' ');
+			return text ? `${message.role}: ${text}` : '';
+		})
+		.filter(Boolean)
+		.join('\n');
+}
+
+/**
+ * Runs the judges attached to the AI Config against this turn's reply.
+ *
+ * The SDK's own `createJudge()` can't be used here: it builds its runner from
+ * `SUPPORTED_AI_PROVIDERS` (openai / langchain / vercel), and this config's
+ * provider is Anthropic, so it returns undefined and every judge silently
+ * never runs. Rather than pull in a provider stack purely to re-reach the
+ * Anthropic API we already talk to, this resolves each judge's config through
+ * LaunchDarkly -- which interpolates the reserved `message_history` and
+ * `response_to_evaluate` variables into its prompt -- and scores it with the
+ * existing client, reporting through `trackJudgeResult` exactly as the SDK
+ * would.
+ *
+ * Awaited rather than fired-and-forgotten: an un-awaited promise is not
+ * guaranteed to survive a serverless response, and losing the events defeats
+ * the point of having judges. Both run concurrently, so the cost is one extra
+ * round-trip on sampled turns. Nothing here can fail the turn.
+ */
+async function runJudges(
+	aiClient: LDAIClient,
+	// Note the SDK names this field `key`, while the REST API calls the same
+	// thing `judgeConfigKey` -- as does trackJudgeResult below.
+	judges: LDJudge[],
+	tracker: LDAIConfigTracker | undefined,
+	context: LDContext,
+	anthropic: Anthropic,
+	messages: Anthropic.Messages.MessageParam[],
+	reply: string
+): Promise<void> {
+	await Promise.all(
+		judges.map(async ({ key: judgeConfigKey, samplingRate }) => {
+			if (Math.random() >= (samplingRate ?? 1)) {
+				tracker?.trackJudgeResult({ judgeConfigKey, success: true, sampled: false });
+				return;
+			}
+			try {
+				const judge = await aiClient.judgeConfig(judgeConfigKey, context);
+				if (!judge?.enabled) return;
+
+				// LaunchDarkly serves only the judge's system prompt: the
+				// message_history / response_to_evaluate turns are reserved and
+				// built by the caller (passing them as variables is explicitly
+				// ignored). This reproduces the shape its stored template
+				// expects, as a single user turn.
+				const system = (judge.messages ?? [])
+					.filter((m) => m.role === 'system')
+					.map((m) => m.content)
+					.join('\n\n');
+				const body =
+					`MESSAGE HISTORY:\n${renderHistory(messages)}\n\n` +
+					`RESPONSE TO EVALUATE:\n${reply}`;
+
+				const response = await anthropic.messages.create({
+					model: toAnthropicModel(judge.model?.name, DEFAULT_MODEL),
+					max_tokens: 512,
+					system,
+					tools: [JUDGE_TOOL],
+					tool_choice: { type: 'tool', name: JUDGE_TOOL.name },
+					messages: [{ role: 'user', content: body }]
+				});
+
+				const toolUse = response.content.find((block) => block.type === 'tool_use');
+				const input = toolUse?.type === 'tool_use' ? (toolUse.input as Record<string, unknown>) : {};
+				const rawScore = input.score;
+				if (typeof rawScore !== 'number' || !Number.isFinite(rawScore)) {
+					throw new Error('Judge did not return a numeric score.');
+				}
+
+				tracker?.trackJudgeResult({
+					judgeConfigKey,
+					success: true,
+					sampled: true,
+					metricKey: judge.evaluationMetricKey,
+					score: Math.min(1, Math.max(0, rawScore)),
+					reasoning: typeof input.reasoning === 'string' ? input.reasoning : undefined
+				});
+			} catch (err) {
+				console.error(`Judge ${judgeConfigKey} failed`, err);
+				tracker?.trackJudgeResult({
+					judgeConfigKey,
+					success: false,
+					sampled: true,
+					errorMessage: err instanceof Error ? err.message : 'Judge evaluation failed.'
+				});
+			}
+		})
+	);
+}
+
 function mockReading(): ChatReading {
 	const roll = () => Math.floor(Math.random() * 7);
 	return { crit: roll(), kill: roll(), tac: roll(), primaryOpChoice: 'crit' };
@@ -221,7 +358,7 @@ export async function runScoreChatTurn(
 		};
 	}
 
-	const modelName = aiConfig?.model?.name ?? DEFAULT_MODEL;
+	const modelName = toAnthropicModel(aiConfig?.model?.name, DEFAULT_MODEL);
 	const systemPrompt = aiConfig?.instructions ?? DEFAULT_PROMPT;
 	const messages = [...history, newUserMessage];
 
@@ -256,6 +393,12 @@ export async function runScoreChatTurn(
 		}
 
 		tracker?.trackSuccess();
+
+		const judges = aiConfig?.judgeConfiguration?.judges;
+		if (aiClient && judges?.length) {
+			await runJudges(aiClient, judges, tracker, context, anthropic, messages, reply);
+		}
+
 		return {
 			reply,
 			you: parseReading(input.you),
