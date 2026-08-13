@@ -25,8 +25,7 @@
 		{ href: '/matches', label: 'Log Match' },
 		{ href: '/stats', label: 'My Stats' },
 		{ href: '/leaderboard', label: 'Leaderboard' },
-		{ href: '/tournaments', label: 'Tournaments' },
-		{ href: '/settings', label: 'Settings' }
+		{ href: '/tournaments', label: 'Tournaments' }
 	];
 
 	// Highlight the nav item for the section we're in, including nested routes
@@ -89,7 +88,13 @@
 			<form method="post" action="/logout" use:enhance>
 				<button type="submit">Sign out</button>
 			</form>
-			<span>{data.user.name}</span>
+			<!-- The username doubles as the way into Settings, so the subnav doesn't
+			     need a link of its own. -->
+			<a
+				class="username-link"
+				href="/settings"
+				aria-current={isActive('/settings') ? 'page' : undefined}>{data.user.name}</a
+			>
 			{#if data.demoMode}
 				<span class="demo-badge">Demo Mode</span>
 			{/if}
