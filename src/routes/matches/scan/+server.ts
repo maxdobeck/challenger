@@ -61,8 +61,8 @@ export const POST: RequestHandler = async (event) => {
 	let result: ScoreScanResult;
 	try {
 		result = hasImage
-			? await scanScoreCard(image as Blob, ldUser, profile)
-			: await parseScoreText(text!, ldUser, profile);
+			? await scanScoreCard(image as Blob, ldUser, profile, event.request.headers)
+			: await parseScoreText(text!, ldUser, profile, event.request.headers);
 	} catch (err) {
 		await recordAttempt(user.id, event.cookies);
 		console.error('Score scan failed', err);
