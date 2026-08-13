@@ -8,11 +8,13 @@
 		identifyUser,
 		resetToAnonymous,
 		flags,
+		flagVariation,
 		ldContextKey,
 		ldReady
 	} from '$lib/stores/launchdarkly';
 	import { buildMultiContext } from '$lib/launchdarkly/context';
 	import { page } from '$app/state';
+	import DevControlPanel from '$lib/components/DevControlPanel.svelte';
 	import type { LayoutServerData } from './$types';
 	const DEMO_MODE = import.meta.env.MODE
 
@@ -37,6 +39,8 @@
 	// Intentionally a plain (non-reactive) let: it's a dedupe marker across effect
 	// runs, not UI state, so writing it must not re-trigger the effect.
 	let identifiedKey: string | null = null;
+
+	const debugMode = flagVariation('debug-mode', false);
 
 	onMount(() => {
 		initLD();
@@ -115,3 +119,7 @@
 <main>
 	{@render children()}
 </main>
+
+{#if $debugMode}
+	<DevControlPanel user={data.user} demoMode={data.demoMode} />
+{/if}
