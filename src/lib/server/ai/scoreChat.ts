@@ -293,6 +293,7 @@ export async function runScoreChatTurn(
 	newUserContent: UserContent,
 	user: ServerLDUser,
 	profile: ServerLDProfile,
+	conversationId: string,
 	requestHeaders?: Headers
 ): Promise<ScoreChatTurnResult> {
 	const context = buildServerContext(user, profile);
@@ -339,6 +340,15 @@ export async function runScoreChatTurn(
 	return withLlmSpan('llm.chat', requestHeaders, async (setSpanAttributes) => {
 		setSpanAttributes({
 			'launchdarkly.ai.config.key': SCORE_CHAT_CONFIG_KEY,
+			// LaunchDarkly only renders a span as an LLM trace when it carries the
+			// GenAI semantic-convention attributes, and only groups spans into a
+			// conversation when they share `gen_ai.conversation.id` -- the one
+			// attribute it treats as required. `provider.name` is what it costs a
+			// call against; `system` is the older spelling of the same thing, kept
+			// because the observability plugin still reads it.
+			'gen_ai.conversation.id': conversationId,
+			'gen_ai.operation.name': 'chat',
+			'gen_ai.provider.name': 'anthropic',
 			'gen_ai.request.model': modelName,
 			'gen_ai.system': 'anthropic'
 		});
@@ -374,9 +384,16 @@ export async function runScoreChatTurn(
 			? await tracker.trackMetricsOf((r) => getAIMetricsFromResponse(r.response), call)
 			: await call();
 
+		// Cache counts are broken out because LaunchDarkly prices cached input
+		// differently from fresh input, and Anthropic serves most of a
+		// conversation's history from cache by the third or fourth turn.
+		const inputDetails = response.usage?.inputTokenDetails;
 		setSpanAttributes({
 			'gen_ai.usage.input_tokens': response.usage?.inputTokens ?? 0,
-			'gen_ai.usage.output_tokens': response.usage?.outputTokens ?? 0
+			'gen_ai.usage.output_tokens': response.usage?.outputTokens ?? 0,
+			'gen_ai.usage.cache_read.input_tokens': inputDetails?.cacheReadTokens ?? 0,
+			'gen_ai.usage.cache_creation.input_tokens': inputDetails?.cacheWriteTokens ?? 0,
+			'gen_ai.response.finish_reasons': response.finishReason
 		});
 
 		const judges = aiConfig?.judgeConfiguration?.judges;

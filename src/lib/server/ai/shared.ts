@@ -84,6 +84,12 @@ export async function runScoreCompletion(
 	return withLlmSpan(`llm.${aiConfigKey}`, requestHeaders, async (setSpanAttributes) => {
 		setSpanAttributes({
 			'launchdarkly.ai.config.key': aiConfigKey,
+			// See runScoreChatTurn for why these are the attributes LaunchDarkly
+			// needs to treat a span as an LLM trace. A scan is a single-turn
+			// conversation, so its id is generated per call rather than carried.
+			'gen_ai.conversation.id': crypto.randomUUID(),
+			'gen_ai.operation.name': 'chat',
+			'gen_ai.provider.name': 'anthropic',
 			'gen_ai.request.model': modelName,
 			'gen_ai.system': 'anthropic'
 		});
@@ -113,9 +119,13 @@ export async function runScoreCompletion(
 			? await tracker.trackMetricsOf((r) => getAIMetricsFromResponse(r.response), call)
 			: await call();
 
+		const inputDetails = response.usage?.inputTokenDetails;
 		setSpanAttributes({
 			'gen_ai.usage.input_tokens': response.usage?.inputTokens ?? 0,
-			'gen_ai.usage.output_tokens': response.usage?.outputTokens ?? 0
+			'gen_ai.usage.output_tokens': response.usage?.outputTokens ?? 0,
+			'gen_ai.usage.cache_read.input_tokens': inputDetails?.cacheReadTokens ?? 0,
+			'gen_ai.usage.cache_creation.input_tokens': inputDetails?.cacheWriteTokens ?? 0,
+			'gen_ai.response.finish_reasons': response.finishReason
 		});
 
 		return parsed;

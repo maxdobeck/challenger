@@ -42,6 +42,17 @@ function parseHistoryField(raw: FormDataEntryValue | null): ModelMessage[] {
 	return sanitizeHistory(parsed);
 }
 
+// The client keeps one id for the life of a conversation so every turn's span
+// groups under it. Like the history beside it that is untrusted input, and it
+// ends up on a span rather than in a query, so anything that isn't the UUID we
+// handed out is replaced instead of rejected -- a bad id is not worth failing a
+// turn over, but it is not worth tracing under either.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseConversationId(raw: FormDataEntryValue | null): string {
+	return typeof raw === 'string' && UUID_PATTERN.test(raw) ? raw : crypto.randomUUID();
+}
+
 export const POST: RequestHandler = async (event) => {
 	const user = event.locals.user;
 	if (!user) {
@@ -57,6 +68,7 @@ export const POST: RequestHandler = async (event) => {
 	const image = formData.get('image');
 	const text = formData.get('text')?.toString().trim();
 	const history = parseHistoryField(formData.get('history'));
+	const conversationId = parseConversationId(formData.get('conversation_id'));
 	const hasImage = image instanceof Blob && image.size > 0;
 	if (!hasImage && !text) {
 		error(400, 'No image or text provided');
@@ -81,7 +93,14 @@ export const POST: RequestHandler = async (event) => {
 
 	let result;
 	try {
-		result = await runScoreChatTurn(history, content, ldUser, profile, event.request.headers);
+		result = await runScoreChatTurn(
+			history,
+			content,
+			ldUser,
+			profile,
+			conversationId,
+			event.request.headers
+		);
 	} catch (err) {
 		await recordAttempt(user.id, event.cookies);
 		console.error('Score chat turn failed', err);
