@@ -189,16 +189,71 @@ test.describe('registration', () => {
 test.describe('registration in demo mode', () => {
 	test.skip(!DEMO_MODE, 'describes demo-mode-only behaviour');
 
-	test('registration is unreachable and unadvertised', async ({ page }) => {
-		// Demo users are a frozen in-memory dataset with no database behind them,
-		// so /register bounces to the page that does work.
+	// Nothing to clean up: a demo account only ever exists in the browser context's
+	// cookie, which Playwright discards at the end of each test.
+	test('a new account can register, sign out and sign back in', async ({ page }) => {
+		const name = faker.person.fullName();
+		const email = newE2eEmail();
+
+		await page.goto('/login');
+		await headerLink(page, 'Register').click();
+		await expect(page).toHaveURL(/\/register/);
+
+		await fillRegistration(page, {
+			name,
+			email,
+			password: VALID_PASSWORD,
+			confirmPassword: VALID_PASSWORD
+		});
+		await page.getByRole('button', { name: 'Create account', exact: true }).click();
+
+		await expect(page).toHaveURL(/\/leaderboard/);
+		await expect(page.locator('.site-header').getByText(name, { exact: true })).toBeVisible();
+
+		// Signing out drops the session but keeps the account, so the same address
+		// signs back in -- the demo stand-in for a password check.
+		await signOut(page);
+		await page.getByLabel('Email').fill(email);
+		await page.getByLabel('Password', { exact: true }).fill(VALID_PASSWORD);
+		await page.getByRole('button', { name: 'Login', exact: true }).click();
+
+		await expect(page).toHaveURL(/\/leaderboard/);
+		await expect(page.locator('.site-header').getByText(name, { exact: true })).toBeVisible();
+	});
+
+	test('a registered account survives a cold start of the in-memory dataset', async ({ page }) => {
+		const name = faker.person.fullName();
+
 		await page.goto('/register');
-		await expect(page).toHaveURL(/\/login/);
+		await fillRegistration(page, {
+			name,
+			email: newE2eEmail(),
+			password: VALID_PASSWORD,
+			confirmPassword: VALID_PASSWORD
+		});
+		await page.getByRole('button', { name: 'Create account', exact: true }).click();
+		await expect(page).toHaveURL(/\/leaderboard/);
 
-		await expect(headerLink(page, 'Login')).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Register', exact: true })).toHaveCount(0);
+		// The account lives in a cookie and is fed back into the in-memory dataset
+		// on every request, so it has to survive requests that never saw the
+		// registration -- a different serverless instance, or a cold start.
+		await page.goto('/stats');
+		await expect(page.locator('.site-header').getByText(name, { exact: true })).toBeVisible();
+	});
 
-		await page.goto('/');
-		await expect(page.getByRole('link', { name: 'Register', exact: true })).toHaveCount(0);
+	test('a seeded demo account cannot be registered twice', async ({ page }) => {
+		await page.goto('/register');
+		await fillRegistration(page, {
+			name: faker.person.fullName(),
+			email: STATIC_USER.email,
+			password: VALID_PASSWORD,
+			confirmPassword: VALID_PASSWORD
+		});
+		await page.getByRole('button', { name: 'Create account', exact: true }).click();
+
+		await expect(
+			page.getByText('That email is already registered. Try logging in instead.')
+		).toBeVisible();
+		await expect(page).toHaveURL(/\/register/);
 	});
 });

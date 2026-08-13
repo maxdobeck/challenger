@@ -4,7 +4,7 @@ import { APIError } from 'better-auth/api';
 import { env } from '$env/dynamic/private';
 import { DEMO_LOGIN_ACCOUNTS, DEMO_LOGIN_PASSWORD } from '$lib/server/db/demo-fixtures';
 import { demoAuthUsersByEmail } from '$lib/server/demo/data';
-import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
+import { setDemoSession } from '$lib/server/demo/session';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -19,14 +19,14 @@ export const load: PageServerLoad = (event) => {
 // (case-insensitive, matching better-auth's own normalization) logs in as
 // that account directly, since there's no database to verify a password
 // against. Returns null when the email isn't a known demo account.
+//
+// An account registered in demo mode signs in here too: hooks.server.ts has
+// already put it back into demoAuthUsersByEmail from its cookie, so it's
+// indistinguishable from a seeded one by the time this runs.
 function signInDemoUser(event: RequestEvent, email: string) {
-	const user = demoAuthUsersByEmail.get(email.toLowerCase());
+	const user = demoAuthUsersByEmail.get(email.trim().toLowerCase());
 	if (!user) return null;
-	event.cookies.set(DEMO_SESSION_COOKIE, user.id, {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax'
-	});
+	setDemoSession(event.cookies, user.id);
 	return user;
 }
 

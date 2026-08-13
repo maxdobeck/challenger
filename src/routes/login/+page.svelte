@@ -91,9 +91,7 @@
 		</ul>
 	</details>
 
-	{#if !data.demoMode}
-		<p class="muted">Need an account? <a href={resolve('/register')}>Register</a></p>
-	{/if}
+	<p class="muted">Need an account? <a href={resolve('/register')}>Register</a></p>
 </form>
 
 {#if form?.message}
@@ -101,7 +99,10 @@
 {/if}
 
 {#if data.demoMode}
-	<p class="muted">Demo mode — enter any demo account's email above, or pick one below (no password needed).</p>
+	<p class="muted">
+		Demo mode — enter any demo account's email above, or pick one below (no password needed). An
+		account you register here lives in this browser only.
+	</p>
 {:else}
 	<p class="muted">Seeded demo accounts use the password <code>password123</code>.</p>
 {/if}

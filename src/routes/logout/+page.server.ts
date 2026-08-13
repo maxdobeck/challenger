@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { env } from '$env/dynamic/private';
-import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
+import { clearDemoSession } from '$lib/server/demo/session';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -12,7 +12,10 @@ export const load: PageServerLoad = () => {
 export const actions: Actions = {
 	default: async (event) => {
 		if (DEMO_MODE) {
-			event.cookies.delete(DEMO_SESSION_COOKIE, { path: '/' });
+			// Only the session goes. An account registered in demo mode lives in a
+			// separate cookie and is kept, so signing out and back in works the way
+			// it does with a real account instead of destroying it.
+			clearDemoSession(event.cookies);
 		} else {
 			const { auth } = await import('$lib/server/auth');
 			await auth.api.signOut({ headers: event.request.headers });

@@ -373,6 +373,42 @@ export function getDemoUserName(userId: string): string | null {
 	return userById.get(userId)?.name ?? null;
 }
 
+/** True when an email already belongs to a seeded account or a registered one. */
+export function isDemoEmailTaken(email: string): boolean {
+	return demoAuthUsersByEmail.has(email.trim().toLowerCase());
+}
+
+/**
+ * Add an account registered through /register to the in-memory dataset, so its
+ * name resolves on the leaderboard, it can be picked as an opponent, and the
+ * session cookie can look it up like any seeded user.
+ *
+ * There is nowhere durable to write it — no database, and the KV integration is
+ * unconfigured — so this dataset is rebuilt empty on every cold start. The
+ * account itself lives in the browser's demo_account cookie and hooks.server.ts
+ * calls this on each request to put it back, which is what carries a
+ * registration across a cold start or a different serverless instance.
+ *
+ * Idempotent: re-registering the same id updates the existing entries rather
+ * than accumulating duplicates, since the rehydrate path runs on every request.
+ */
+export function registerDemoUser(account: { id: string; name: string; email: string }): DemoUser {
+	const existing = userById.get(account.id);
+	const user: DemoUser = existing ?? { id: account.id, name: account.name, email: account.email };
+	user.name = account.name;
+	user.email = account.email;
+
+	if (!existing) {
+		demoUsers.push(user);
+		userById.set(user.id, user);
+	}
+
+	const authUser = toDemoAuthUser(user);
+	demoAuthUsersById.set(user.id, authUser);
+	demoAuthUsersByEmail.set(user.email.toLowerCase(), authUser);
+	return user;
+}
+
 export async function addDemoMatch(input: {
 	player1Id: string;
 	player2Id: string;

@@ -2,8 +2,8 @@ import type { Handle } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import { demoAuthUsersById } from '$lib/server/demo/data';
-import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
+import { demoAuthUsersById, registerDemoUser } from '$lib/server/demo/data';
+import { DEMO_SESSION_COOKIE, readDemoAccount } from '$lib/server/demo/session';
 import { warmLdClient } from '$lib/server/ai/ldClient';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
@@ -18,6 +18,13 @@ if (!building) warmLdClient();
 // stale/unknown id, means logged out — same as real auth, just backed by an
 // in-memory map instead of Postgres.
 const handleDemoAuth: Handle = ({ event, resolve }) => {
+	// An account registered in demo mode lives in the browser's cookie, because
+	// the in-memory dataset is rebuilt on every cold start and there's nothing
+	// durable to write to. Putting it back before the session lookup is what
+	// makes a registration outlive the instance that handled it.
+	const account = readDemoAccount(event.cookies);
+	if (account) registerDemoUser(account);
+
 	const uid = event.cookies.get(DEMO_SESSION_COOKIE);
 	const user = uid ? demoAuthUsersById.get(uid) : undefined;
 	if (user) event.locals.user = user;

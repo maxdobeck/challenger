@@ -1,4 +1,5 @@
-import { fail, redirect } from '@sveltejs/kit';
+import { fail, redirect, type RequestEvent } from '@sveltejs/kit';
+import { randomUUID } from 'node:crypto';
 import type { Actions, PageServerLoad } from './$types';
 import { APIError } from 'better-auth/api';
 import { env } from '$env/dynamic/private';
@@ -28,12 +29,6 @@ type RegistrationFailure = {
 };
 
 export const load: PageServerLoad = (event) => {
-	// Demo mode's users are a frozen in-memory dataset with no way to add one, so
-	// there's nothing this page could do there. Every link to it is already hidden
-	// in demo mode; this catches a typed URL or a stale bookmark.
-	if (DEMO_MODE) {
-		return redirect(302, '/login');
-	}
 	if (event.locals.user) {
 		return redirect(302, '/leaderboard');
 	}
@@ -79,6 +74,38 @@ function errorsFromApiError(error: APIError): { errors: RegistrationErrors; mess
 	return { errors: NO_FIELD_ERRORS, message: message || 'Registration failed' };
 }
 
+/**
+ * Register an account in demo mode, where there's no database to write to.
+ *
+ * The account is handed to the browser as a cookie and re-inserted into the
+ * in-memory dataset on every request (see hooks.server.ts), which is what lets
+ * it survive a cold start. It's a real account as far as the demo is concerned
+ * — it can log matches, appear on the leaderboard and sign back in — it just
+ * lives in that browser rather than on the server.
+ */
+async function registerDemoAccount(
+	event: RequestEvent,
+	{ name, email, values }: { name: string; email: string; values: { name: string; email: string } }
+) {
+	const { isDemoEmailTaken, registerDemoUser } = await import('$lib/server/demo/data');
+	const { setDemoAccount, setDemoSession } = await import('$lib/server/demo/session');
+
+	if (isDemoEmailTaken(email)) {
+		const failure: RegistrationFailure = {
+			errors: { email: 'That email is already registered. Try logging in instead.' },
+			values
+		};
+		return fail(400, failure);
+	}
+
+	const account = { id: `demo-registered-${randomUUID()}`, name, email };
+	registerDemoUser(account);
+	setDemoAccount(event.cookies, account);
+	setDemoSession(event.cookies, account.id);
+
+	return redirect(302, '/leaderboard');
+}
+
 export const actions: Actions = {
 	// Unlike every other action in this app, failures here come back as per-field
 	// `errors` alongside the `values` to repopulate, rather than a single flat
@@ -86,10 +113,6 @@ export const actions: Actions = {
 	// point of having a dedicated registration page. `message` is kept for the
 	// failures that can't be pinned to one field.
 	default: async (event) => {
-		if (DEMO_MODE) {
-			return redirect(302, '/login');
-		}
-
 		const formData = await event.request.formData();
 		const name = (formData.get('name')?.toString() ?? '').trim();
 		const email = (formData.get('email')?.toString() ?? '').trim();
@@ -103,6 +126,10 @@ export const actions: Actions = {
 		if (hasErrors(errors)) {
 			const failure: RegistrationFailure = { errors, values };
 			return fail(400, failure);
+		}
+
+		if (DEMO_MODE) {
+			return registerDemoAccount(event, { name, email, values });
 		}
 
 		// Dynamic import: $lib/server/auth builds a database-backed better-auth

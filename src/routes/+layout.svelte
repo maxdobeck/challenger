@@ -88,10 +88,9 @@
 			{#if data.demoMode}
 				<span class="demo-badge">Demo Mode</span>
 			{/if}
-		{:else if page.url.pathname.startsWith('/login') && !data.demoMode}
+		{:else if page.url.pathname.startsWith('/login')}
 			<!-- A "Login" button is dead weight on the login page itself, so that's
-			     where the masthead offers the way to register instead. Demo mode has
-			     no registration, so it keeps the Login link everywhere. -->
+			     where the masthead offers the way to register instead. -->
 			<a class="header-cta" href="/register">Register</a>
 		{:else}
 			<a class="header-cta" href="/login">Login</a>
