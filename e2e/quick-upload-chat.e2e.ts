@@ -7,6 +7,11 @@ import { scoreScanFixtures } from './fixtures/score-scan-fixtures';
 import { sampleScoreTrackerImageBuffer } from './fixtures/sample-score-tracker';
 import * as schema from '../src/lib/server/db/schema';
 
+// Kept in sync by hand with src/lib/server/scanThrottle.ts -- importing it
+// here would pull in $lib/server/db and $env/dynamic/private, neither of which
+// resolves outside Vite.
+const SCAN_LIMIT_PER_DAY = 100;
+
 const SEED_PASSWORD = 'password123';
 const TEST1_EMAIL = 'test1@challenger.example.com';
 
@@ -291,7 +296,7 @@ test('shows a friendly message once the daily scan cap is hit (demo-mode cookie)
 	await page.context().addCookies([
 		{
 			name: 'scan_count',
-			value: JSON.stringify({ count: 20, windowStart: Date.now() }),
+			value: JSON.stringify({ count: SCAN_LIMIT_PER_DAY, windowStart: Date.now() }),
 			url: page.url()
 		}
 	]);
@@ -323,7 +328,9 @@ test('shows a friendly message once the daily scan cap is hit (real-DB scanEvent
 	const testUser = await db.query.user.findFirst({ where: (u, { eq }) => eq(u.email, TEST1_EMAIL) });
 	if (!testUser) throw new Error(`Seeded user ${TEST1_EMAIL} not found`);
 
-	await db.insert(schema.scanEvent).values(Array.from({ length: 20 }, () => ({ userId: testUser.id })));
+	await db
+		.insert(schema.scanEvent)
+		.values(Array.from({ length: SCAN_LIMIT_PER_DAY }, () => ({ userId: testUser.id })));
 
 	try {
 		await page.goto('/login');

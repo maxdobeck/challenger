@@ -20,7 +20,7 @@ function parseCookie(raw: string | undefined): ScanCookieState | null {
 }
 
 // Demo-mode's cookie-carried counterpart to scanThrottle.ts's DB-backed
-// isThrottled() -- same 20-scans-per-24h policy, tracked client-side since
+// isThrottled() -- same SCAN_LIMIT_PER_DAY-per-24h policy, tracked client-side since
 // demo mode has no durable per-user server store to query (see Plan 1's
 // "Deployment reality" notes on Vercel serverless + DEMO_MODE).
 export function isThrottledByCookie(cookies: Cookies): boolean {

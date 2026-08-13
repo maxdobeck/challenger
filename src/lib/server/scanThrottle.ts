@@ -5,7 +5,7 @@ import { and, count, eq, gt, sql } from 'drizzle-orm';
 // Real-DB-mode counterpart to demo mode's cookie-based throttle: both cap a user
 // at this many score-scan attempts per rolling 24h window, just computed from a
 // real per-user history here instead of a client-carried counter.
-export const SCAN_LIMIT_PER_DAY = 20;
+export const SCAN_LIMIT_PER_DAY = 100;
 
 export async function isThrottled(userId: string): Promise<boolean> {
 	const rows = await db
