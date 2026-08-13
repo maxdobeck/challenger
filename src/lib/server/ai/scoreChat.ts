@@ -7,7 +7,7 @@ import {
 } from '@launchdarkly/server-sdk-ai';
 import type { LDContext } from '@launchdarkly/node-server-sdk';
 import { env } from '$env/dynamic/private';
-import { getAiClient } from './ldClient';
+import { getAiClient, withLlmSpan, flushLdTelemetry } from './ldClient';
 import { buildServerContext, type ServerLDUser, type ServerLDProfile } from './context';
 
 export const SCORE_CHAT_CONFIG_KEY = 'score-chat';
@@ -322,12 +322,16 @@ function mockReading(): ChatReading {
  * requires every tool_use block to be answered before the conversation can
  * continue; returning an already-valid array is what makes the client's
  * resend-as-is contract work.
+ *
+ * `requestHeaders` are the incoming request's, forwarded only to carry the
+ * browser's trace context into the span this opens -- see `withLlmSpan`.
  */
 export async function runScoreChatTurn(
 	history: Anthropic.Messages.MessageParam[],
 	newUserContent: Anthropic.Messages.MessageParam['content'],
 	user: ServerLDUser,
-	profile: ServerLDProfile
+	profile: ServerLDProfile,
+	requestHeaders?: Headers
 ): Promise<ScoreChatTurnResult> {
 	const context = buildServerContext(user, profile);
 	const aiClient = await getAiClient();
@@ -345,6 +349,9 @@ export async function runScoreChatTurn(
 
 	if (!env.ANTHROPIC_API_KEY) {
 		tracker?.trackSuccess();
+		// Returns without going through withLlmSpan, so this path has to flush
+		// its own event or the serverless invocation freezes on top of it.
+		await flushLdTelemetry();
 		const reply = 'Logging a mock reading — no Anthropic API key is configured.';
 		return {
 			reply,
@@ -363,54 +370,75 @@ export async function runScoreChatTurn(
 	const messages = [...history, newUserMessage];
 
 	try {
-		const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-		const start = Date.now();
-		const response = await anthropic.messages.create({
-			model: modelName,
-			// Roomier than the one-shot scans' 256: replies now carry real
-			// conversational text alongside the structured reading.
-			max_tokens: 512,
-			system: systemPrompt,
-			tools: [SCORE_CHAT_TOOL],
-			tool_choice: { type: 'tool', name: SCORE_CHAT_TOOL.name },
-			messages
+		// The whole turn -- the reply generation *and* the judge calls it
+		// triggers -- runs inside one span, so a trace shows the judging as
+		// part of the turn that caused it rather than as unrelated roots. The
+		// span is also what lets LaunchDarkly associate the trace with the
+		// evaluated AI Config: the `track` calls below record metrics, but
+		// metrics alone carry no trace association.
+		return await withLlmSpan('llm.chat', requestHeaders, async (setSpanAttributes) => {
+			setSpanAttributes({
+				'launchdarkly.ai.config.key': SCORE_CHAT_CONFIG_KEY,
+				'gen_ai.request.model': modelName,
+				'gen_ai.system': 'anthropic'
+			});
+
+			const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+			const start = Date.now();
+			const response = await anthropic.messages.create({
+				model: modelName,
+				// Roomier than the one-shot scans' 256: replies now carry real
+				// conversational text alongside the structured reading.
+				max_tokens: 512,
+				system: systemPrompt,
+				tools: [SCORE_CHAT_TOOL],
+				tool_choice: { type: 'tool', name: SCORE_CHAT_TOOL.name },
+				messages
+			});
+			tracker?.trackDuration(Date.now() - start);
+			tracker?.trackTokens({
+				total: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
+				input: response.usage?.input_tokens ?? 0,
+				output: response.usage?.output_tokens ?? 0
+			});
+			setSpanAttributes({
+				'gen_ai.usage.input_tokens': response.usage?.input_tokens ?? 0,
+				'gen_ai.usage.output_tokens': response.usage?.output_tokens ?? 0
+			});
+
+			const toolUse = response.content.find((block) => block.type === 'tool_use');
+			if (toolUse?.type !== 'tool_use') {
+				throw new Error('Model did not return a structured reply.');
+			}
+			const input = toolUse.input as Record<string, unknown>;
+			const reply = typeof input.reply === 'string' ? input.reply : '';
+			if (!reply) {
+				throw new Error('Model did not return a reply.');
+			}
+
+			tracker?.trackSuccess();
+
+			const judges = aiConfig?.judgeConfiguration?.judges;
+			if (aiClient && judges?.length) {
+				await runJudges(aiClient, judges, tracker, context, anthropic, messages, reply);
+			}
+
+			return {
+				reply,
+				you: parseReading(input.you),
+				opponent: parseReading(input.opponent),
+				history: [
+					...history,
+					stripImages(newUserMessage),
+					{ role: 'assistant', content: response.content },
+					{
+						role: 'user' as const,
+						content: [{ type: 'tool_result' as const, tool_use_id: toolUse.id, content: 'ok' }]
+					}
+				],
+				resumptionToken: tracker?.resumptionToken ?? null
+			};
 		});
-		tracker?.trackDuration(Date.now() - start);
-		tracker?.trackTokens({
-			total: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
-			input: response.usage?.input_tokens ?? 0,
-			output: response.usage?.output_tokens ?? 0
-		});
-
-		const toolUse = response.content.find((block) => block.type === 'tool_use');
-		if (toolUse?.type !== 'tool_use') {
-			throw new Error('Model did not return a structured reply.');
-		}
-		const input = toolUse.input as Record<string, unknown>;
-		const reply = typeof input.reply === 'string' ? input.reply : '';
-		if (!reply) {
-			throw new Error('Model did not return a reply.');
-		}
-
-		tracker?.trackSuccess();
-
-		const judges = aiConfig?.judgeConfiguration?.judges;
-		if (aiClient && judges?.length) {
-			await runJudges(aiClient, judges, tracker, context, anthropic, messages, reply);
-		}
-
-		return {
-			reply,
-			you: parseReading(input.you),
-			opponent: parseReading(input.opponent),
-			history: [
-				...history,
-				stripImages(newUserMessage),
-				{ role: 'assistant', content: response.content },
-				{ role: 'user', content: [{ type: 'tool_result', tool_use_id: toolUse.id, content: 'ok' }] }
-			],
-			resumptionToken: tracker?.resumptionToken ?? null
-		};
 	} catch (err) {
 		tracker?.trackError();
 		throw err;
@@ -436,5 +464,8 @@ export async function submitScoreFeedback(
 	tracker.trackFeedback({
 		kind: kind === 'positive' ? LDFeedbackKind.Positive : LDFeedbackKind.Negative
 	});
+	// This request does nothing *but* record an event, so returning before it
+	// is delivered would make the whole endpoint a no-op on serverless.
+	await flushLdTelemetry();
 	return true;
 }

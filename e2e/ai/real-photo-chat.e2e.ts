@@ -21,6 +21,11 @@ import { loginAsMax } from '../helpers';
 // `npm run test:e2e:ai`.
 test.describe('sending a real photo through the score chat', { tag: '@ai' }, () => {
 	test('a photo turn reaches the chat endpoint and comes back as a reading', async ({ page }) => {
+		// The 60s expect timeouts below are unreachable under Playwright's
+		// default 30s per-test budget, so the test always timed out before its
+		// own assertions could -- raise the test to fit them.
+		test.setTimeout(150_000);
+
 		const pageErrors: Error[] = [];
 		page.on('pageerror', (err) => pageErrors.push(err));
 

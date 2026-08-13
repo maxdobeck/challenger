@@ -84,7 +84,7 @@ export const POST: RequestHandler = async (event) => {
 
 	let result;
 	try {
-		result = await runScoreChatTurn(history, content, ldUser, profile);
+		result = await runScoreChatTurn(history, content, ldUser, profile, event.request.headers);
 	} catch (err) {
 		await recordAttempt(user.id, event.cookies);
 		console.error('Score chat turn failed', err);
