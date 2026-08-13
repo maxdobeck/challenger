@@ -1,4 +1,84 @@
 import { expect, type Page } from '@playwright/test';
+import { faker } from '@faker-js/faker';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { inArray, like } from 'drizzle-orm';
+import postgres from 'postgres';
+import * as schema from '../src/lib/server/db/schema';
+
+// Every account a test creates is addressed `e2e-<uuid>@challenger.example.com`.
+// The prefix is the contract between newE2eEmail() and the two cleanup routines
+// below, which is why all three live together: the sweep's LIKE pattern has to
+// keep matching whatever the generator produces, and nothing seeded looks like
+// this (fixtures use max@killteam.example, test1@…, and killteamEmail() names).
+const E2E_EMAIL_PREFIX = 'e2e-';
+const E2E_EMAIL_DOMAIN = '@challenger.example.com';
+
+/** A registration address no previous run can have used. */
+export function newE2eEmail() {
+	return `${E2E_EMAIL_PREFIX}${faker.string.uuid()}${E2E_EMAIL_DOMAIN}`;
+}
+
+function connect() {
+	const DATABASE_URL = process.env.DATABASE_URL;
+	if (!DATABASE_URL) {
+		throw new Error(
+			'DATABASE_URL is not set (copy .env.example to .env and fill it in; Playwright loads .env automatically)'
+		);
+	}
+	const client = postgres(DATABASE_URL);
+	return { client, db: drizzle(client, { schema }) };
+}
+
+/**
+ * Delete accounts a test created, so a run leaves the database as it found it.
+ *
+ * Deleting the user row is enough to take its sessions, credentials, profile,
+ * matches, tournament registrations and scan events with it — every foreign key
+ * to `user.id` is ON DELETE CASCADE. `verification` is the one exception: it
+ * keys off the email string with no foreign key, so nothing cascades to it.
+ * It's empty today (this app never verifies an address) and cleared here anyway,
+ * so enabling verification later can't start silently orphaning rows.
+ *
+ * A tournament created by a deleted user would survive with a null creator —
+ * no test creates one, but that's the gap to close if one ever does.
+ */
+export async function deleteE2eUsers(emails: string[]) {
+	if (emails.length === 0) return;
+
+	// A cleanup routine that deletes the wrong row would quietly gut the seeded
+	// data every other suite logs in as, so refuse anything we didn't generate
+	// rather than trusting the caller's list.
+	const foreign = emails.filter((email) => !email.startsWith(E2E_EMAIL_PREFIX));
+	if (foreign.length > 0) {
+		throw new Error(`refusing to delete non-e2e accounts: ${foreign.join(', ')}`);
+	}
+
+	const { client, db } = connect();
+	try {
+		await db.delete(schema.verification).where(inArray(schema.verification.identifier, emails));
+		await db.delete(schema.user).where(inArray(schema.user.email, emails));
+	} finally {
+		await client.end();
+	}
+}
+
+/**
+ * Remove accounts stranded by an earlier run that died between creating one and
+ * cleaning it up — a hard interrupt, a CI timeout. Returns how many it deleted.
+ */
+export async function sweepE2eUsers() {
+	const { client, db } = connect();
+	try {
+		const pattern = `${E2E_EMAIL_PREFIX}%${E2E_EMAIL_DOMAIN}`;
+		await db.delete(schema.verification).where(like(schema.verification.identifier, pattern));
+		const stranded = await db.delete(schema.user).where(like(schema.user.email, pattern)).returning({
+			email: schema.user.email
+		});
+		return stranded.length;
+	} finally {
+		await client.end();
+	}
+}
 
 // Logs in as Max and lands on the leaderboard. Works the same way in both
 // modes: /login always renders the form and Max is the default-selected

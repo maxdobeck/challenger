@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import type { ActionData, PageData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -34,7 +35,7 @@
 </script>
 
 <h1>Login</h1>
-<p class="muted">Sign in with an existing account, or register a new one below.</p>
+<p class="muted">Sign in to log matches and track your record.</p>
 
 {#if data.deleted}
 	<p class="muted">Your account and data have been deleted.</p>
@@ -55,19 +56,8 @@
 			autocomplete="current-password"
 		/>
 	</label>
-	<label>
-		Name <span class="muted">(only needed to register)</span>
-		<input name="name" autocomplete="name" />
-	</label>
 	<div style="display:flex; gap:0.75rem; flex-wrap: wrap;">
 		<button type="submit">Login</button>
-		<button
-			type="submit"
-			formaction="?/signUpEmail"
-			class="button"
-			style="background:transparent; color:var(--color-text); border-color:var(--color-border);"
-			>Register</button
-		>
 		{#if selectedAccount}
 			<button
 				type="submit"
@@ -104,6 +94,8 @@
 			{/each}
 		</ul>
 	</details>
+
+	<p class="muted">Need an account? <a href={resolve('/register')}>Register</a></p>
 </form>
 
 {#if form?.message}

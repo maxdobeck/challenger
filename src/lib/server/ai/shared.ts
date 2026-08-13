@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { env } from '$env/dynamic/private';
-import { getAiClient } from './ldClient';
+import { getAiClient, withLlmSpan, flushLdTelemetry } from './ldClient';
 import { buildServerContext, type ServerLDUser, type ServerLDProfile } from './context';
 
 export type ScoreScanResult = { crit: number; kill: number; tac: number };
@@ -52,7 +52,8 @@ export async function runScoreCompletion(
 	defaultPrompt: string,
 	userContent: Anthropic.Messages.MessageParam['content'],
 	user: ServerLDUser,
-	profile: ServerLDProfile
+	profile: ServerLDProfile,
+	requestHeaders?: Headers
 ): Promise<ScoreScanResult> {
 	const context = buildServerContext(user, profile);
 	const aiClient = await getAiClient();
@@ -66,6 +67,9 @@ export async function runScoreCompletion(
 
 	if (!env.ANTHROPIC_API_KEY) {
 		tracker?.trackSuccess();
+		// Returns without going through withLlmSpan, so this path has to flush
+		// its own event or the serverless invocation freezes on top of it.
+		await flushLdTelemetry();
 		return mockScoreResult();
 	}
 
@@ -73,31 +77,47 @@ export async function runScoreCompletion(
 	const systemPrompt = aiConfig?.messages?.[0]?.content ?? defaultPrompt;
 
 	try {
-		const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-		const start = Date.now();
-		const response = await anthropic.messages.create({
-			model: modelName,
-			max_tokens: 256,
-			system: systemPrompt,
-			tools: [SCORE_TOOL],
-			tool_choice: { type: 'tool', name: SCORE_TOOL.name },
-			messages: [{ role: 'user', content: userContent }]
-		});
-		tracker?.trackDuration(Date.now() - start);
-		tracker?.trackTokens({
-			total: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
-			input: response.usage?.input_tokens ?? 0,
-			output: response.usage?.output_tokens ?? 0
-		});
+		// Running inside a span is what lets LaunchDarkly associate a trace with
+		// this AI Config -- the tracker calls below record metrics, but metrics
+		// alone carry no trace association. See scoreChat.ts's runScoreChatTurn
+		// for the same pattern.
+		return await withLlmSpan(`llm.${aiConfigKey}`, requestHeaders, async (setSpanAttributes) => {
+			setSpanAttributes({
+				'launchdarkly.ai.config.key': aiConfigKey,
+				'gen_ai.request.model': modelName,
+				'gen_ai.system': 'anthropic'
+			});
 
-		const toolUse = response.content.find((block) => block.type === 'tool_use');
-		const parsed = toolUse?.type === 'tool_use' ? toolUse.input : null;
-		if (!isPlausibleScoreResult(parsed)) {
-			throw new Error('Model did not return a structured reading.');
-		}
+			const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+			const start = Date.now();
+			const response = await anthropic.messages.create({
+				model: modelName,
+				max_tokens: 256,
+				system: systemPrompt,
+				tools: [SCORE_TOOL],
+				tool_choice: { type: 'tool', name: SCORE_TOOL.name },
+				messages: [{ role: 'user', content: userContent }]
+			});
+			tracker?.trackDuration(Date.now() - start);
+			tracker?.trackTokens({
+				total: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
+				input: response.usage?.input_tokens ?? 0,
+				output: response.usage?.output_tokens ?? 0
+			});
+			setSpanAttributes({
+				'gen_ai.usage.input_tokens': response.usage?.input_tokens ?? 0,
+				'gen_ai.usage.output_tokens': response.usage?.output_tokens ?? 0
+			});
 
-		tracker?.trackSuccess();
-		return parsed;
+			const toolUse = response.content.find((block) => block.type === 'tool_use');
+			const parsed = toolUse?.type === 'tool_use' ? toolUse.input : null;
+			if (!isPlausibleScoreResult(parsed)) {
+				throw new Error('Model did not return a structured reading.');
+			}
+
+			tracker?.trackSuccess();
+			return parsed;
+		});
 	} catch (err) {
 		tracker?.trackError();
 		throw err;

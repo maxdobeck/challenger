@@ -95,6 +95,21 @@ h1 {
 	font-size: 0.9rem;
 }
 
+/* The logged-out call to action. Mirrors the geometry of .site-header button so it
+   sits at the same size as "Sign out", with a black outline that reads as a button
+   against the orange masthead. */
+.site-header .account .header-cta {
+	border: 1px solid #000000;
+	padding: 0.35rem 0.9rem;
+	border-radius: 2px;
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.site-header .account .header-cta:hover {
+	background: rgba(0, 0, 0, 0.15);
+}
+
 .site-header button {
 	background: transparent;
 	border: 1px solid rgba(255, 255, 255, 0.7);

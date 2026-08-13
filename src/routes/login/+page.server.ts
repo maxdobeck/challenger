@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { APIError } from 'better-auth/api';
 import { env } from '$env/dynamic/private';
 import { DEMO_LOGIN_ACCOUNTS, DEMO_LOGIN_PASSWORD } from '$lib/server/db/demo-fixtures';
-import { demoAuthUsersByEmail, authenticateDemoUser, registerDemoUser } from '$lib/server/demo/data';
+import { demoAuthUsersByEmail, authenticateDemoUser } from '$lib/server/demo/data';
 import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
@@ -19,9 +19,9 @@ export const load: PageServerLoad = (event) => {
 // Demo mode's stand-in for a password check. Curated demo emails
 // (case-insensitive, matching better-auth's own normalization) log in
 // directly, regardless of password — there's no database to verify one
-// against. Accounts created through demo-mode registration (see
-// signUpEmail below) are real, individually deletable identities, so those
-// do have their password checked. Returns null when neither matches.
+// against. Accounts created through demo-mode registration (see /register)
+// are real, individually deletable identities, so those do have their
+// password checked. Returns null when neither matches.
 function signInDemoUser(event: RequestEvent, email: string, password: string) {
 	const user = demoAuthUsersByEmail.get(email.toLowerCase()) ?? authenticateDemoUser(email, password);
 	if (!user) return null;
@@ -88,45 +88,6 @@ export const actions: Actions = {
 		} catch (error) {
 			if (error instanceof APIError) {
 				return fail(400, { message: error.message || 'Sign in failed' });
-			}
-			return fail(500, { message: 'Unexpected error' });
-		}
-
-		return redirect(302, '/leaderboard');
-	},
-	signUpEmail: async (event) => {
-		const formData = await event.request.formData();
-		const email = formData.get('email')?.toString() ?? '';
-		const password = formData.get('password')?.toString() ?? '';
-		const name = formData.get('name')?.toString() ?? '';
-
-		if (DEMO_MODE) {
-			// Unlike the curated demo accounts, a registered account is a real,
-			// individually deletable identity scoped to this server process —
-			// this is what powers trying out account deletion in demo mode.
-			if (!email || !password) {
-				return fail(400, { message: 'Email and password are required.' });
-			}
-			const created = registerDemoUser({ name: name || email, email, password });
-			if (!created) {
-				return fail(400, { message: 'That email is already in use.' });
-			}
-			event.cookies.set(DEMO_SESSION_COOKIE, created.id, {
-				path: '/',
-				httpOnly: true,
-				sameSite: 'lax'
-			});
-			return redirect(302, '/leaderboard');
-		}
-
-		const { auth } = await import('$lib/server/auth');
-		try {
-			await auth.api.signUpEmail({
-				body: { email, password, name }
-			});
-		} catch (error) {
-			if (error instanceof APIError) {
-				return fail(400, { message: error.message || 'Registration failed' });
 			}
 			return fail(500, { message: 'Unexpected error' });
 		}

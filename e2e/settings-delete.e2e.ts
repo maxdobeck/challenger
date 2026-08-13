@@ -1,25 +1,40 @@
-import { expect, test } from '@playwright/test';
-import { loginAsMax } from './helpers';
+import { expect, test, type Page } from '@playwright/test';
+import { deleteE2eUsers, loginAsMax, newE2eEmail } from './helpers';
 
-// Registers a fresh, disposable account through the same UI path signUpEmail
-// already supports for both modes: a real better-auth user in DB mode, or a
-// self-registered (password-checked, individually deletable) demo identity in
-// demo mode — never one of the shared curated fixtures like Max.
-async function registerDisposableAccount(page: import('@playwright/test').Page) {
-	const email = `e2e-delete-${Date.now()}@example.com`;
-	const password = 'TestPassw0rd!';
+const DEMO_MODE = process.env.DEMO_MODE === 'true';
+const PASSWORD = 'TestPassw0rd!';
 
-	await page.goto('/login');
-	await page.getByLabel('Email').fill(email);
-	await page.getByLabel('Password', { exact: true }).fill(password);
-	await page.locator('input[name="name"]').fill('E2E Delete Me');
-	await page.getByRole('button', { name: 'Register' }).click();
+// Tracks accounts created via registerDisposableAccount in DB mode so
+// afterEach can clean them up if a test fails before it deletes its own
+// account. In demo mode there's no Postgres row behind a registered account
+// (see registerDemoUser in $lib/server/demo/data) — nothing to sweep there.
+const createdEmails: string[] = [];
+
+// Registers a fresh, disposable account through /register: a real better-auth
+// user in DB mode, or a self-registered (password-checked, individually
+// deletable) demo identity in demo mode — never one of the shared curated
+// fixtures like Max.
+async function registerDisposableAccount(page: Page) {
+	const email = newE2eEmail();
+	createdEmails.push(email);
+
+	await page.goto('/register');
+	await page.getByLabel('Name', { exact: true }).fill('E2E Delete Me');
+	await page.getByLabel('Email', { exact: true }).fill(email);
+	await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+	await page.getByLabel('Confirm password', { exact: true }).fill(PASSWORD);
+	await page.getByRole('button', { name: 'Create account', exact: true }).click();
 
 	// Registration succeeded and signed us in — this proves the account exists.
 	await expect(page).toHaveURL(/\/leaderboard/);
 
-	return { email, password };
+	return { email, password: PASSWORD };
 }
+
+test.afterEach(async () => {
+	if (DEMO_MODE) return;
+	await deleteE2eUsers(createdEmails.splice(0));
+});
 
 test('the delete button stays disabled until both confirmations are met, then deleting the account removes it', async ({
 	page
@@ -65,7 +80,7 @@ test('a deleted account can no longer log in', async ({ page }) => {
 });
 
 test('the shared curated demo account cannot be deleted', async ({ page }) => {
-	test.skip(process.env.DEMO_MODE !== 'true', 'demo-mode-only protection for curated fixtures');
+	test.skip(!DEMO_MODE, 'demo-mode-only protection for curated fixtures');
 
 	await loginAsMax(page);
 	await page.goto('/settings');
