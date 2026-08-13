@@ -75,6 +75,32 @@ export async function getAiClient(): Promise<LDAIClient | null> {
 }
 
 /**
+ * Pushes everything buffered to LaunchDarkly, and waits for it.
+ *
+ * Two independent pipelines, both of which batch by default and neither of
+ * which survives a frozen serverless invocation:
+ *
+ * - Analytics events (every `track*` call on an AI Config tracker) are
+ *   delivered by the server SDK on a timer -- `flushInterval`, 5s by default.
+ * - OpenTelemetry spans are batched by the observability plugin's exporter.
+ *
+ * Vercel can freeze the function as soon as the response is written, so a
+ * turn that returns in under a second reliably loses both. That is the whole
+ * reason a run can look perfectly healthy in the app while the AI Config's
+ * Monitoring tab stays empty.
+ *
+ * Never throws: losing telemetry must not fail a turn the user already got a
+ * good answer from.
+ */
+export async function flushLdTelemetry(): Promise<void> {
+	const client = await getLdClient();
+	await Promise.all([
+		client?.flush().catch(() => {}),
+		observabilityReady ? LDObserve.flush().catch(() => {}) : Promise.resolve()
+	]);
+}
+
+/**
  * Runs `fn` inside an OpenTelemetry span, when observability is configured.
  *
  * `requestHeaders` carry the browser's trace context: the client-side
@@ -83,10 +109,9 @@ export async function getAiClient(): Promise<LDAIClient | null> {
  * stitches this span onto the session that caused it instead of leaving it a
  * disconnected root.
  *
- * The flush is not optional on serverless: exporters batch, and Vercel can
- * freeze the function the moment the response is sent, which would drop the
- * span we just paid to record. Same reasoning as awaiting the judges in
- * scoreChat.ts. It runs in `finally` so a failed turn still reports its span.
+ * The flush in `finally` is not optional on serverless (see
+ * `flushLdTelemetry`), and runs on the failure path too -- an errored turn is
+ * exactly the one worth having a span and an error metric for.
  */
 export async function withLlmSpan<T>(
 	name: string,
@@ -94,14 +119,14 @@ export async function withLlmSpan<T>(
 	fn: (setAttributes: (attributes: Record<string, string | number>) => void) => Promise<T>
 ): Promise<T> {
 	await getLdClient();
-	if (!observabilityReady) return fn(() => {});
-
-	const headers = requestHeaders ? Object.fromEntries(requestHeaders) : {};
 	try {
+		if (!observabilityReady) return await fn(() => {});
+
+		const headers = requestHeaders ? Object.fromEntries(requestHeaders) : {};
 		return (await LDObserve.runWithHeaders(name, headers, async (span) => {
 			return fn((attributes) => span.setAttributes(attributes));
 		})) as T;
 	} finally {
-		await LDObserve.flush().catch(() => {});
+		await flushLdTelemetry();
 	}
 }

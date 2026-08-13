@@ -7,7 +7,7 @@ import {
 } from '@launchdarkly/server-sdk-ai';
 import type { LDContext } from '@launchdarkly/node-server-sdk';
 import { env } from '$env/dynamic/private';
-import { getAiClient, withLlmSpan } from './ldClient';
+import { getAiClient, withLlmSpan, flushLdTelemetry } from './ldClient';
 import { buildServerContext, type ServerLDUser, type ServerLDProfile } from './context';
 
 export const SCORE_CHAT_CONFIG_KEY = 'score-chat';
@@ -349,6 +349,9 @@ export async function runScoreChatTurn(
 
 	if (!env.ANTHROPIC_API_KEY) {
 		tracker?.trackSuccess();
+		// Returns without going through withLlmSpan, so this path has to flush
+		// its own event or the serverless invocation freezes on top of it.
+		await flushLdTelemetry();
 		const reply = 'Logging a mock reading — no Anthropic API key is configured.';
 		return {
 			reply,
@@ -461,5 +464,8 @@ export async function submitScoreFeedback(
 	tracker.trackFeedback({
 		kind: kind === 'positive' ? LDFeedbackKind.Positive : LDFeedbackKind.Negative
 	});
+	// This request does nothing *but* record an event, so returning before it
+	// is delivered would make the whole endpoint a no-op on serverless.
+	await flushLdTelemetry();
 	return true;
 }
