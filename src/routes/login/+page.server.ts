@@ -3,7 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { APIError } from 'better-auth/api';
 import { env } from '$env/dynamic/private';
 import { DEMO_LOGIN_ACCOUNTS, DEMO_LOGIN_PASSWORD } from '$lib/server/db/demo-fixtures';
-import { demoAuthUsersByEmail } from '$lib/server/demo/data';
+import { demoAuthUsersByEmail, authenticateDemoUser, registerDemoUser } from '$lib/server/demo/data';
 import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
@@ -12,15 +12,18 @@ export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		return redirect(302, '/leaderboard');
 	}
-	return { demoAccounts: DEMO_LOGIN_ACCOUNTS, demoMode: DEMO_MODE };
+	const deleted = event.url.searchParams.get('deleted') === '1';
+	return { demoAccounts: DEMO_LOGIN_ACCOUNTS, demoMode: DEMO_MODE, deleted };
 };
 
-// Demo mode's stand-in for a password check: any of the curated demo emails
-// (case-insensitive, matching better-auth's own normalization) logs in as
-// that account directly, since there's no database to verify a password
-// against. Returns null when the email isn't a known demo account.
-function signInDemoUser(event: RequestEvent, email: string) {
-	const user = demoAuthUsersByEmail.get(email.toLowerCase());
+// Demo mode's stand-in for a password check. Curated demo emails
+// (case-insensitive, matching better-auth's own normalization) log in
+// directly, regardless of password — there's no database to verify one
+// against. Accounts created through demo-mode registration (see
+// signUpEmail below) are real, individually deletable identities, so those
+// do have their password checked. Returns null when neither matches.
+function signInDemoUser(event: RequestEvent, email: string, password: string) {
+	const user = demoAuthUsersByEmail.get(email.toLowerCase()) ?? authenticateDemoUser(email, password);
 	if (!user) return null;
 	event.cookies.set(DEMO_SESSION_COOKIE, user.id, {
 		path: '/',
@@ -37,8 +40,10 @@ export const actions: Actions = {
 		const password = formData.get('password')?.toString() ?? '';
 
 		if (DEMO_MODE) {
-			if (!signInDemoUser(event, email)) {
-				return fail(400, { message: 'Unknown demo account — pick one from the list below.' });
+			if (!signInDemoUser(event, email, password)) {
+				return fail(400, {
+					message: 'Unknown demo account, or incorrect password for a registered one.'
+				});
 			}
 			return redirect(302, '/leaderboard');
 		}
@@ -69,7 +74,7 @@ export const actions: Actions = {
 		}
 
 		if (DEMO_MODE) {
-			if (!signInDemoUser(event, account.email)) {
+			if (!signInDemoUser(event, account.email, DEMO_LOGIN_PASSWORD)) {
 				return fail(400, { message: 'Unknown demo account' });
 			}
 			return redirect(302, '/leaderboard');
@@ -90,16 +95,29 @@ export const actions: Actions = {
 		return redirect(302, '/leaderboard');
 	},
 	signUpEmail: async (event) => {
-		if (DEMO_MODE) {
-			return fail(400, {
-				message: 'Registration is not available in demo mode — pick one of the demo accounts below.'
-			});
-		}
-
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
 		const name = formData.get('name')?.toString() ?? '';
+
+		if (DEMO_MODE) {
+			// Unlike the curated demo accounts, a registered account is a real,
+			// individually deletable identity scoped to this server process —
+			// this is what powers trying out account deletion in demo mode.
+			if (!email || !password) {
+				return fail(400, { message: 'Email and password are required.' });
+			}
+			const created = registerDemoUser({ name: name || email, email, password });
+			if (!created) {
+				return fail(400, { message: 'That email is already in use.' });
+			}
+			event.cookies.set(DEMO_SESSION_COOKIE, created.id, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax'
+			});
+			return redirect(302, '/leaderboard');
+		}
 
 		const { auth } = await import('$lib/server/auth');
 		try {

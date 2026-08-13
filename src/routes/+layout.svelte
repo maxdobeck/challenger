@@ -23,7 +23,8 @@
 		{ href: '/matches', label: 'Log Match' },
 		{ href: '/stats', label: 'My Stats' },
 		{ href: '/leaderboard', label: 'Leaderboard' },
-		{ href: '/tournaments', label: 'Tournaments' }
+		{ href: '/tournaments', label: 'Tournaments' },
+		{ href: '/settings', label: 'Settings' }
 	];
 
 	// Highlight the nav item for the section we're in, including nested routes

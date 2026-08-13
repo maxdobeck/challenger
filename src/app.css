@@ -444,6 +444,43 @@ button[type='submit']:hover,
 	color: var(--color-accent);
 }
 
+.button-danger {
+	display: inline-block;
+	background: var(--color-loss);
+	color: #fff;
+	border: 1px solid var(--color-loss);
+	padding: 0.6rem 1.1rem;
+	border-radius: 2px;
+	font-size: 0.95rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	cursor: pointer;
+	align-self: flex-start;
+}
+
+.button-danger:hover:not(:disabled) {
+	background: #d9432e;
+	border-color: #d9432e;
+}
+
+.button-danger:disabled {
+	background: var(--color-border);
+	border-color: var(--color-border);
+	color: var(--color-text-muted);
+	cursor: not-allowed;
+}
+
+.danger-zone {
+	border-color: var(--color-loss);
+}
+
+.checkbox-row {
+	flex-direction: row !important;
+	align-items: center;
+	gap: 0.5rem !important;
+}
+
 .quick-upload-card {
 	display: flex;
 	align-items: center;

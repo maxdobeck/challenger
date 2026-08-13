@@ -2,7 +2,7 @@ import type { Handle } from '@sveltejs/kit';
 import { building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
-import { demoAuthUsersById } from '$lib/server/demo/data';
+import { getDemoUserById } from '$lib/server/demo/data';
 import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
 import { warmLdClient } from '$lib/server/ai/ldClient';
 
@@ -19,7 +19,7 @@ if (!building) warmLdClient();
 // in-memory map instead of Postgres.
 const handleDemoAuth: Handle = ({ event, resolve }) => {
 	const uid = event.cookies.get(DEMO_SESSION_COOKIE);
-	const user = uid ? demoAuthUsersById.get(uid) : undefined;
+	const user = uid ? getDemoUserById(uid) : undefined;
 	if (user) event.locals.user = user;
 	return resolve(event);
 };
