@@ -1,6 +1,6 @@
 import { error, json, type Cookies } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type Anthropic from '@anthropic-ai/sdk';
+import type { ModelMessage, UserContent } from 'ai';
 import { env } from '$env/dynamic/private';
 import { resolveMediaType } from '$lib/server/ai/scoreVision';
 import { runScoreChatTurn, sanitizeHistory, MAX_HISTORY_CHARS } from '$lib/server/ai/scoreChat';
@@ -28,7 +28,7 @@ async function recordAttempt(userId: string, cookies: Cookies): Promise<void> {
 	}
 }
 
-function parseHistoryField(raw: FormDataEntryValue | null): Anthropic.Messages.MessageParam[] {
+function parseHistoryField(raw: FormDataEntryValue | null): ModelMessage[] {
 	if (typeof raw !== 'string' || !raw) return [];
 	if (raw.length > MAX_HISTORY_CHARS) {
 		error(400, 'This conversation has gotten too long — start over.');
@@ -65,16 +65,13 @@ export const POST: RequestHandler = async (event) => {
 		error(400, 'Image is too large.');
 	}
 
-	const content: Anthropic.Messages.ContentBlockParam[] = [];
+	const content: Extract<UserContent, unknown[]> = [];
 	if (hasImage) {
 		const blob = image as Blob;
 		content.push({
 			type: 'image',
-			source: {
-				type: 'base64',
-				media_type: resolveMediaType(blob),
-				data: Buffer.from(await blob.arrayBuffer()).toString('base64')
-			}
+			image: Buffer.from(await blob.arrayBuffer()).toString('base64'),
+			mediaType: resolveMediaType(blob)
 		});
 	}
 	content.push({ type: 'text', text: text || IMAGE_ONLY_PROMPT });
