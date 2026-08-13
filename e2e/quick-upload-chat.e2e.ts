@@ -198,16 +198,33 @@ test('the running reading updates from the same conversation for both sides', as
 	await expect(page.getByTestId('reading-you')).toContainText(`Crit ${you.critOp}`);
 	await expect(page.getByTestId('reading-opponent')).toContainText('Not known yet');
 
+	// The scorecard fills in as the conversation goes, not only at Confirm --
+	// so the player's side is already on the form here, while the opponent's
+	// fields are untouched rather than zeroed by a half-known turn.
+	await expect(page.locator('input[name="player1Crit"]')).toHaveValue(String(you.critOp));
+	await expect(page.locator('input[name="player1Kill"]')).toHaveValue(String(you.killOp));
+	await expect(page.locator('input[name="player1Tac"]')).toHaveValue(String(you.tacOp));
+	// Primary stays 0 until the Primary op is actually answered.
+	await expect(page.locator('input[name="player1Primary"]')).toHaveValue('0');
+	await expect(page.locator('input[name="player2Crit"]')).toHaveValue('0');
+
 	await sendText(page, `opponent got ${opponent.critOp} crit, ${opponent.killOp} kill, ${opponent.tacOp} tac`);
 	await expect(page.getByTestId('reading-opponent')).toContainText(`Crit ${opponent.critOp}`);
+	await expect(page.locator('input[name="player2Crit"]')).toHaveValue(String(opponent.critOp));
+	await expect(page.locator('input[name="player2Kill"]')).toHaveValue(String(opponent.killOp));
+	await expect(page.locator('input[name="player2Tac"]')).toHaveValue(String(opponent.tacOp));
 
 	// Primary is never inferred from what's already known: both sides still
 	// need an answer before Confirm shows up.
 	await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeHidden();
 	await page.getByRole('button', { name: 'Your Primary: Crit', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeHidden();
+	// Answering Primary fills the derived Primary score straight away too.
+	await expect(page.locator('input[name="player1Primary"]')).toHaveValue(String(yourPrimaryScore));
+
 	await page.getByRole('button', { name: "Opponent's Primary: Kill", exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeVisible();
+	await expect(page.locator('select[name="player2PrimaryOpChoice"]')).toHaveValue(OPPONENT_PRIMARY);
 });
 
 // ScoreChat.svelte renders a single file input (no `capture` attribute) for

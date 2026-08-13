@@ -33,6 +33,26 @@
 </p>
 
 <ScoreChat
+	onUpdate={(draft) => {
+		// Fires every turn with whatever the conversation has established so
+		// far. A null side is one the model hasn't read yet, so leave those
+		// fields untouched instead of zeroing them back out.
+		if (draft.you) {
+			player1.crit = draft.you.crit;
+			player1.kill = draft.you.kill;
+			player1.tac = draft.you.tac;
+			player1.primary = draft.you.primary;
+			if (draft.you.primaryOpChoice) player1.primaryOpChoice = draft.you.primaryOpChoice;
+		}
+		if (draft.opponent) {
+			player2.crit = draft.opponent.crit;
+			player2.kill = draft.opponent.kill;
+			player2.tac = draft.opponent.tac;
+			// player2's Primary is derived from primaryOpChoice on this page,
+			// so setting the choice is what fills its readout.
+			if (draft.opponent.primaryOpChoice) player2.primaryOpChoice = draft.opponent.primaryOpChoice;
+		}
+	}}
 	onConfirm={(result) => {
 		player1.crit = result.you.crit;
 		player1.kill = result.you.kill;

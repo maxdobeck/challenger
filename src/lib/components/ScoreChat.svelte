@@ -6,9 +6,23 @@
 	type ScoreResult = { crit: number; kill: number; tac: number; primary: number; primaryOpChoice: Category };
 	type ChatTurn = { role: 'user' | 'assistant'; text: string };
 	type Side = 'you' | 'opponent';
+	// A side that's partly known: crit/kill/tac are in, but primaryOpChoice
+	// (and so primary) may still be outstanding.
+	type ScoreDraft = {
+		crit: number;
+		kill: number;
+		tac: number;
+		primary: number;
+		primaryOpChoice: Category | null;
+	};
 
-	let { onConfirm }: { onConfirm: (result: { you: ScoreResult; opponent: ScoreResult }) => void } =
-		$props();
+	let {
+		onConfirm,
+		onUpdate
+	}: {
+		onConfirm: (result: { you: ScoreResult; opponent: ScoreResult }) => void;
+		onUpdate?: (draft: { you: ScoreDraft | null; opponent: ScoreDraft | null }) => void;
+	} = $props();
 
 	const CATEGORY_LABELS: Record<Category, string> = { crit: 'Crit', kill: 'Kill', tac: 'Tac' };
 	const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
@@ -43,6 +57,18 @@
 
 	function primaryFor(reading: ChatReading): number {
 		return reading.primaryOpChoice ? Math.ceil(reading[reading.primaryOpChoice] / 2) : 0;
+	}
+
+	function toDraft(reading: ChatReading | null): ScoreDraft | null {
+		return reading
+			? {
+					crit: reading.crit,
+					kill: reading.kill,
+					tac: reading.tac,
+					primary: primaryFor(reading),
+					primaryOpChoice: reading.primaryOpChoice
+				}
+			: null;
 	}
 
 	function toResult(reading: ChatReading): ScoreResult {
@@ -88,6 +114,10 @@
 			you = result.you;
 			opponent = result.opponent;
 			resumptionToken = result.resumption_token;
+			// Push whatever is known into the form on every turn, rather than
+			// making the user wait for Confirm to see anything -- a side that
+			// isn't known yet reports null and simply leaves its fields alone.
+			onUpdate?.({ you: toDraft(you), opponent: toDraft(opponent) });
 			// A fresh reading is a fresh thing to judge, so let the user rate it
 			// again rather than leaving the first verdict stuck to it.
 			feedbackGiven = null;
