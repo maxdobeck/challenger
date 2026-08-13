@@ -28,7 +28,16 @@ async function registerDisposableAccount(page: Page) {
 	// Registration succeeded and signed us in — this proves the account exists.
 	await expect(page).toHaveURL(/\/leaderboard/);
 
-	return { email, password: PASSWORD };
+	return { email, password: PASSWORD, name: 'E2E Delete Me' };
+}
+
+// Settings has no subnav link of its own: the masthead username is the way in.
+// Going through it keeps these tests on the route a user actually takes.
+async function openSettingsFromUsername(page: Page, name: string) {
+	// Scoped to the masthead: the leaderboard links player names too, and an
+	// unscoped by-name lookup would match both.
+	await page.locator('.site-header').getByRole('link', { name, exact: true }).click();
+	await expect(page).toHaveURL(/\/settings/);
 }
 
 test.afterEach(async () => {
@@ -39,8 +48,11 @@ test.afterEach(async () => {
 test('the delete button stays disabled until both confirmations are met, then deleting the account removes it', async ({
 	page
 }) => {
-	await registerDisposableAccount(page);
-	await page.goto('/settings');
+	const { name } = await registerDisposableAccount(page);
+
+	// The subnav no longer carries Settings — the username link replaced it.
+	await expect(page.locator('.site-subnav').getByRole('link', { name: 'Settings' })).toHaveCount(0);
+	await openSettingsFromUsername(page, name);
 
 	const deleteButton = page.getByRole('button', { name: 'Delete my data' });
 	await expect(deleteButton).toBeDisabled();
@@ -64,9 +76,9 @@ test('the delete button stays disabled until both confirmations are met, then de
 });
 
 test('a deleted account can no longer log in', async ({ page }) => {
-	const { email, password } = await registerDisposableAccount(page);
+	const { email, password, name } = await registerDisposableAccount(page);
 
-	await page.goto('/settings');
+	await openSettingsFromUsername(page, name);
 	await page.getByLabel('Type delete to confirm').fill('delete');
 	await page.getByLabel(/I understand this is permanent/).check();
 	await page.getByRole('button', { name: 'Delete my data' }).click();
@@ -83,7 +95,7 @@ test('the shared curated demo account cannot be deleted', async ({ page }) => {
 	test.skip(!DEMO_MODE, 'demo-mode-only protection for curated fixtures');
 
 	await loginAsMax(page);
-	await page.goto('/settings');
+	await openSettingsFromUsername(page, 'Max');
 
 	await expect(page.getByText("This is a shared demo account and can't be deleted")).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Delete my data' })).toHaveCount(0);

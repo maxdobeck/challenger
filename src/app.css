@@ -13,6 +13,7 @@
 	--color-win: #4caf72;
 	--color-loss: #ff5b45;
 	--color-draw: #d4b95a;
+	--color-username-hover: #7b3fe4;
 }
 
 * {
@@ -108,6 +109,22 @@ h1 {
 
 .site-header .account .header-cta:hover {
 	background: rgba(0, 0, 0, 0.15);
+}
+
+/* The signed-in username is the entry point to Settings. Outlined like the other
+   masthead buttons so it reads as clickable, and it fills purple on hover. */
+.site-header .account .username-link {
+	border: 1px solid #ffffff;
+	padding: 0.35rem 0.9rem;
+	border-radius: 2px;
+	font-size: 0.85rem;
+	font-weight: 600;
+}
+
+.site-header .account .username-link:hover,
+.site-header .account .username-link:focus-visible {
+	background: var(--color-username-hover);
+	border-color: var(--color-username-hover);
 }
 
 .site-header button {
