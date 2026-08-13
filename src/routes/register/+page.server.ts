@@ -9,6 +9,8 @@ import {
 	validateRegistration,
 	type RegistrationErrors
 } from '$lib/registration';
+import { registerDemoUser } from '$lib/server/demo/data';
+import { DEMO_SESSION_COOKIE } from '$lib/server/demo/session';
 
 const DEMO_MODE = env.DEMO_MODE === 'true';
 
@@ -28,12 +30,6 @@ type RegistrationFailure = {
 };
 
 export const load: PageServerLoad = (event) => {
-	// Demo mode's users are a frozen in-memory dataset with no way to add one, so
-	// there's nothing this page could do there. Every link to it is already hidden
-	// in demo mode; this catches a typed URL or a stale bookmark.
-	if (DEMO_MODE) {
-		return redirect(302, '/login');
-	}
 	if (event.locals.user) {
 		return redirect(302, '/leaderboard');
 	}
@@ -86,10 +82,6 @@ export const actions: Actions = {
 	// point of having a dedicated registration page. `message` is kept for the
 	// failures that can't be pinned to one field.
 	default: async (event) => {
-		if (DEMO_MODE) {
-			return redirect(302, '/login');
-		}
-
 		const formData = await event.request.formData();
 		const name = (formData.get('name')?.toString() ?? '').trim();
 		const email = (formData.get('email')?.toString() ?? '').trim();
@@ -103,6 +95,26 @@ export const actions: Actions = {
 		if (hasErrors(errors)) {
 			const failure: RegistrationFailure = { errors, values };
 			return fail(400, failure);
+		}
+
+		if (DEMO_MODE) {
+			// Unlike the curated demo accounts, a registered account is a real,
+			// individually deletable identity scoped to this server process — this
+			// is what powers trying out account deletion in demo mode.
+			const created = registerDemoUser({ name, email, password });
+			if (!created) {
+				const failure: RegistrationFailure = {
+					errors: { email: 'That email is already registered. Try logging in instead.' },
+					values
+				};
+				return fail(400, failure);
+			}
+			event.cookies.set(DEMO_SESSION_COOKIE, created.id, {
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax'
+			});
+			return redirect(302, '/leaderboard');
 		}
 
 		// Dynamic import: $lib/server/auth builds a database-backed better-auth

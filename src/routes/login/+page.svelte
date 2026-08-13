@@ -37,6 +37,10 @@
 <h1>Login</h1>
 <p class="muted">Sign in to log matches and track your record.</p>
 
+{#if data.deleted}
+	<p class="muted">Your account and data have been deleted.</p>
+{/if}
+
 <form class="stack card" method="post" action="?/signInEmail" use:enhance>
 	<label>
 		Email
@@ -91,9 +95,7 @@
 		</ul>
 	</details>
 
-	{#if !data.demoMode}
-		<p class="muted">Need an account? <a href={resolve('/register')}>Register</a></p>
-	{/if}
+	<p class="muted">Need an account? <a href={resolve('/register')}>Register</a></p>
 </form>
 
 {#if form?.message}
@@ -101,7 +103,10 @@
 {/if}
 
 {#if data.demoMode}
-	<p class="muted">Demo mode — enter any demo account's email above, or pick one below (no password needed).</p>
+	<p class="muted">
+		Demo mode — sign in with any curated demo account above (no password needed), or register a
+		temporary account to try things like account deletion.
+	</p>
 {:else}
 	<p class="muted">Seeded demo accounts use the password <code>password123</code>.</p>
 {/if}

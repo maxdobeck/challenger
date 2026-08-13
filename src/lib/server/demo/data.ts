@@ -124,6 +124,60 @@ export const demoAuthUsersByEmail = new Map(
 	demoUsers.map((u) => [u.email.toLowerCase(), toDemoAuthUser(u)])
 );
 
+type RegisteredDemoUser = { id: string; name: string; email: string; password: string };
+
+// Accounts created through demo mode's registration form (see /login's
+// signUpEmail action) — unlike the curated fixtures above, these are real,
+// individually deletable identities scoped to this server process. Nothing
+// here is persisted; a restart clears it, same as the rest of demo mode's
+// in-memory state.
+const registeredDemoUsersById = new Map<string, RegisteredDemoUser>();
+const registeredDemoUsersByEmail = new Map<string, RegisteredDemoUser>();
+
+export function isCuratedDemoUser(id: string): boolean {
+	return demoAuthUsersById.has(id);
+}
+
+export function registerDemoUser(input: {
+	name: string;
+	email: string;
+	password: string;
+}): { id: string } | null {
+	const email = input.email.toLowerCase();
+	if (demoAuthUsersByEmail.has(email) || registeredDemoUsersByEmail.has(email)) {
+		return null;
+	}
+	const id = `demo-reg-${crypto.randomUUID()}`;
+	const record: RegisteredDemoUser = { id, name: input.name, email, password: input.password };
+	registeredDemoUsersById.set(id, record);
+	registeredDemoUsersByEmail.set(email, record);
+	return { id };
+}
+
+// Password-checked lookup for a self-registered demo account — the curated
+// fixtures above stay password-less (see signInDemoUser in login's action).
+export function authenticateDemoUser(email: string, password: string) {
+	const record = registeredDemoUsersByEmail.get(email.toLowerCase());
+	if (!record || record.password !== password) return null;
+	return toDemoAuthUser(record);
+}
+
+export function deleteRegisteredDemoUser(id: string): void {
+	const record = registeredDemoUsersById.get(id);
+	if (!record) return;
+	registeredDemoUsersById.delete(id);
+	registeredDemoUsersByEmail.delete(record.email);
+}
+
+// Session-cookie lookup spanning both the curated fixtures and any
+// self-registered accounts.
+export function getDemoUserById(id: string) {
+	const curated = demoAuthUsersById.get(id);
+	if (curated) return curated;
+	const registered = registeredDemoUsersById.get(id);
+	return registered ? toDemoAuthUser(registered) : undefined;
+}
+
 // Reproducible in-memory tournaments, composed from the shared fixture arrays via
 // the seeded rng (the real seed uses faker instead — see seed.ts).
 function isoDate(d: Date): string {

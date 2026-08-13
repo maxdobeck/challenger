@@ -189,16 +189,61 @@ test.describe('registration', () => {
 test.describe('registration in demo mode', () => {
 	test.skip(!DEMO_MODE, 'describes demo-mode-only behaviour');
 
-	test('registration is unreachable and unadvertised', async ({ page }) => {
-		// Demo users are a frozen in-memory dataset with no database behind them,
-		// so /register bounces to the page that does work.
-		await page.goto('/register');
-		await expect(page).toHaveURL(/\/login/);
+	// Unlike DB-mode registration, a demo account created here lives only in an
+	// in-memory map (see registerDemoUser in $lib/server/demo/data) that's
+	// cleared on server restart — nothing to sweep with deleteE2eUsers.
 
-		await expect(headerLink(page, 'Login')).toBeVisible();
-		await expect(page.getByRole('link', { name: 'Register', exact: true })).toHaveCount(0);
-
+	test('the masthead offers Login off the login page and Register on it', async ({ page }) => {
 		await page.goto('/');
-		await expect(page.getByRole('link', { name: 'Register', exact: true })).toHaveCount(0);
+		await expect(headerLink(page, 'Login')).toBeVisible();
+		await expect(headerLink(page, 'Register')).toHaveCount(0);
+
+		await page.goto('/login');
+		await expect(headerLink(page, 'Register')).toBeVisible();
+		await expect(headerLink(page, 'Login')).toHaveCount(0);
+	});
+
+	test('a new account can register in demo mode and lands signed in', async ({ page }) => {
+		const name = faker.person.fullName();
+
+		await page.goto('/login');
+		await headerLink(page, 'Register').click();
+		await expect(page).toHaveURL(/\/register/);
+
+		await fillRegistration(page, {
+			name,
+			email: newE2eEmail(),
+			password: VALID_PASSWORD,
+			confirmPassword: VALID_PASSWORD
+		});
+		await page.getByRole('button', { name: 'Create account', exact: true }).click();
+
+		await expect(page).toHaveURL(/\/leaderboard/);
+		// Scope to the masthead: a name can also appear in a leaderboard row.
+		await expect(page.locator('.site-header').getByText(name, { exact: true })).toBeVisible();
+
+		// Proves the signup produced a real, cookie-backed session rather than
+		// just a redirect.
+		await signOut(page);
+	});
+
+	test('registering an already-used demo email is rejected under the email field', async ({
+		page
+	}) => {
+		const name = faker.person.fullName();
+
+		await page.goto('/register');
+		await fillRegistration(page, {
+			name,
+			email: STATIC_USER.email,
+			password: VALID_PASSWORD,
+			confirmPassword: VALID_PASSWORD
+		});
+		await page.getByRole('button', { name: 'Create account', exact: true }).click();
+
+		await expect(
+			page.getByText('That email is already registered. Try logging in instead.')
+		).toBeVisible();
+		await expect(page).toHaveURL(/\/register/);
 	});
 });

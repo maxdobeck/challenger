@@ -23,7 +23,8 @@
 		{ href: '/matches', label: 'Log Match' },
 		{ href: '/stats', label: 'My Stats' },
 		{ href: '/leaderboard', label: 'Leaderboard' },
-		{ href: '/tournaments', label: 'Tournaments' }
+		{ href: '/tournaments', label: 'Tournaments' },
+		{ href: '/settings', label: 'Settings' }
 	];
 
 	// Highlight the nav item for the section we're in, including nested routes
@@ -88,10 +89,9 @@
 			{#if data.demoMode}
 				<span class="demo-badge">Demo Mode</span>
 			{/if}
-		{:else if page.url.pathname.startsWith('/login') && !data.demoMode}
+		{:else if page.url.pathname.startsWith('/login')}
 			<!-- A "Login" button is dead weight on the login page itself, so that's
-			     where the masthead offers the way to register instead. Demo mode has
-			     no registration, so it keeps the Login link everywhere. -->
+			     where the masthead offers the way to register instead. -->
 			<a class="header-cta" href="/register">Register</a>
 		{:else}
 			<a class="header-cta" href="/login">Login</a>
