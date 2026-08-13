@@ -88,31 +88,5 @@ export const actions: Actions = {
 		}
 
 		return redirect(302, '/leaderboard');
-	},
-	signUpEmail: async (event) => {
-		if (DEMO_MODE) {
-			return fail(400, {
-				message: 'Registration is not available in demo mode — pick one of the demo accounts below.'
-			});
-		}
-
-		const formData = await event.request.formData();
-		const email = formData.get('email')?.toString() ?? '';
-		const password = formData.get('password')?.toString() ?? '';
-		const name = formData.get('name')?.toString() ?? '';
-
-		const { auth } = await import('$lib/server/auth');
-		try {
-			await auth.api.signUpEmail({
-				body: { email, password, name }
-			});
-		} catch (error) {
-			if (error instanceof APIError) {
-				return fail(400, { message: error.message || 'Registration failed' });
-			}
-			return fail(500, { message: 'Unexpected error' });
-		}
-
-		return redirect(302, '/leaderboard');
 	}
 };
