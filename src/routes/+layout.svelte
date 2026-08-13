@@ -89,7 +89,7 @@
 				<span class="demo-badge">Demo Mode</span>
 			{/if}
 		{:else}
-			<a href="/login">Login</a>
+			<a href="/login">Register</a>
 		{/if}
 	</div>
 </header>
