@@ -10,7 +10,7 @@ import * as schema from '../src/lib/server/db/schema';
 // Kept in sync by hand with src/lib/server/scanThrottle.ts -- importing it
 // here would pull in $lib/server/db and $env/dynamic/private, neither of which
 // resolves outside Vite.
-const SCAN_LIMIT_PER_DAY = 100;
+const SCAN_LIMIT_PER_DAY = 500;
 
 const SEED_PASSWORD = 'password123';
 const TEST1_EMAIL = 'test1@challenger.example.com';

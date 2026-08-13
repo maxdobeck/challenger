@@ -26,6 +26,18 @@ const HEADED = process.argv.includes('--headed');
 export default defineConfig({
 	webServer: { command: 'npm run build && npm run preview', port: 4173, reuseExistingServer: !process.env.CI },
 	testMatch: '**/*.e2e.{ts,js}',
+	// Feature branches are checked out as nested worktrees under
+	// .claude/worktrees/ (see CLAUDE.md workflow); without this, their e2e
+	// files get swept up by the glob above and run against this checkout's
+	// UI, failing on stale selectors from whatever state that branch was in.
+	//
+	// Anchored to this config's own directory rather than written as
+	// '**/.claude/worktrees/**': Playwright matches testIgnore against absolute
+	// paths, so the bare glob also matches a worktree's *own* tests when the
+	// suite is run from inside one -- every spec is ignored and the run dies
+	// with "No tests found". Anchoring means each checkout ignores only the
+	// worktrees nested beneath it, which is the actual intent.
+	testIgnore: `${import.meta.dirname}/.claude/worktrees/**`,
 	globalSetup: './e2e/global-setup.ts',
 	workers: HEADED ? 4 : 5,
 	// 10 concurrent workers can outpace the single `npm run preview` process
