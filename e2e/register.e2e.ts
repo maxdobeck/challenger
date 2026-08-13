@@ -1,17 +1,33 @@
 import { expect, test, type Page } from '@playwright/test';
 import { faker } from '@faker-js/faker';
-import { signOut } from './helpers';
+import { deleteE2eUsers, newE2eEmail, signOut } from './helpers';
 import { STATIC_USER } from '../src/lib/server/db/demo-fixtures';
 
 const DEMO_MODE = process.env.DEMO_MODE === 'true';
 
-// Registration writes a real row, so every run needs an address no previous run
-// used. New accounts have no matches, so they never show up on the leaderboard
-// or perturb the other suites — they just accumulate in a long-lived dev
-// database, which is harmless (CI's Postgres is thrown away each run).
-const uniqueEmail = () => `e2e-${faker.string.uuid()}@challenger.example.com`;
-
 const VALID_PASSWORD = 'password123';
+
+// Registration writes a real row, so a test that expects to create one records
+// the address here and afterEach deletes it — a run leaves the database exactly
+// as it found it. Registering is the whole point of the page, so the accounts
+// can't be avoided; they just don't outlive the test that made them.
+//
+// Tests record the address *before* submitting, so an account still gets
+// cleaned up when a later assertion fails. Deleting one that was never created
+// is a no-op.
+const createdEmails: string[] = [];
+
+/**
+ * A fresh address whose account gets deleted after the test, whether or not one
+ * ends up being created. The tests that expect to be rejected use it too: they
+ * cost nothing to clean up, and if the validation they're checking ever
+ * regresses into letting a signup through, the row still doesn't survive.
+ */
+function trackedEmail() {
+	const email = newE2eEmail();
+	createdEmails.push(email);
+	return email;
+}
 
 async function fillRegistration(
 	page: Page,
@@ -29,6 +45,12 @@ const headerLink = (page: Page, name: string) =>
 
 test.describe('registration', () => {
 	test.skip(DEMO_MODE, 'creates real accounts, N/A in demo mode');
+
+	// Runs even when the test body failed or timed out, which is exactly when an
+	// account is most likely to have been left behind.
+	test.afterEach(async () => {
+		await deleteE2eUsers(createdEmails.splice(0));
+	});
 
 	test('the masthead offers Login off the login page and Register on it', async ({ page }) => {
 		await page.goto('/');
@@ -49,7 +71,7 @@ test.describe('registration', () => {
 
 		await fillRegistration(page, {
 			name,
-			email: uniqueEmail(),
+			email: trackedEmail(),
 			password: VALID_PASSWORD,
 			confirmPassword: VALID_PASSWORD
 		});
@@ -68,7 +90,7 @@ test.describe('registration', () => {
 
 		await fillRegistration(page, {
 			name: faker.person.fullName(),
-			email: uniqueEmail(),
+			email: trackedEmail(),
 			password: VALID_PASSWORD,
 			confirmPassword: 'something-else'
 		});
@@ -87,7 +109,7 @@ test.describe('registration', () => {
 
 		await fillRegistration(page, {
 			name: faker.person.fullName(),
-			email: uniqueEmail(),
+			email: trackedEmail(),
 			password: '12345678',
 			confirmPassword: '12345678'
 		});
