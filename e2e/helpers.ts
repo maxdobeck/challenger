@@ -93,6 +93,42 @@ export async function loginAsMax(page: Page) {
 	await expect(page).toHaveURL(/\/leaderboard/);
 }
 
+/**
+ * Registers a throwaway account and lands signed in as it, returning the
+ * address so the caller can delete it (see `deleteE2eUsers`).
+ *
+ * The AI Config seam keys LaunchDarkly targeting on the user id
+ * (`buildServerContext`), and a percentage rollout buckets that key
+ * deterministically -- so a suite that always signs in as the seeded Max
+ * evaluates every run against whichever variation Max happens to land in, and
+ * never exercises the other one. A fresh user per test is what makes a repeated
+ * run spread across variations the way real traffic does. It also starts each
+ * test on an empty scan-throttle history rather than accumulating against one
+ * shared account.
+ *
+ * Demo mode can't register (its accounts are fixtures, not rows), and its
+ * context keys are already fixed per demo account, so there is nothing to
+ * randomize -- it signs in as Max instead.
+ */
+export async function loginAsFreshUser(page: Page): Promise<string | null> {
+	if (process.env.DEMO_MODE === 'true') {
+		await loginAsMax(page);
+		return null;
+	}
+
+	const email = newE2eEmail();
+	const password = 'password123';
+	await page.goto('/register');
+	await page.getByLabel('Name', { exact: true }).fill(faker.person.fullName());
+	await page.getByLabel('Email', { exact: true }).fill(email);
+	// `exact` matters on both: 'Password' alone also matches 'Confirm password'.
+	await page.getByLabel('Password', { exact: true }).fill(password);
+	await page.getByLabel('Confirm password', { exact: true }).fill(password);
+	await page.getByRole('button', { name: 'Create account', exact: true }).click();
+	await expect(page).toHaveURL(/\/leaderboard/);
+	return email;
+}
+
 // Resolves once LaunchDarkly has identified the logged-in user, using the
 // `data-ld-context` attribute the layout already puts on the header (see
 // src/routes/+layout.svelte). Before identify() resolves the attribute is

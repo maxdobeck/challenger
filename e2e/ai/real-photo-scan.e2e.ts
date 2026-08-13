@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { loginAsMax } from '../helpers';
+import { deleteE2eUsers, loginAsFreshUser } from '../helpers';
 
 // This test started as a reproduction of a real "Scan failed (413)" report:
 // ScorePhotoScan.svelte/ScoreChat.svelte used to always re-encode the upload
@@ -38,13 +38,19 @@ import { loginAsMax } from '../helpers';
 // browser-side canvas re-encoding taking real (slow, CPU-bound) time — not
 // suitable for every CI run. Run deliberately with `npm run test:e2e:ai`.
 test.describe('scanning a real oversized phone photo', { tag: '@ai' }, () => {
+	const createdEmails: string[] = [];
+	test.afterEach(async () => {
+		await deleteE2eUsers(createdEmails.splice(0));
+	});
+
 	test('a real 12MP phone photo is downscaled to a small payload before upload', async ({
 		page
 	}) => {
 		const pageErrors: Error[] = [];
 		page.on('pageerror', (err) => pageErrors.push(err));
 
-		await loginAsMax(page);
+		const email = await loginAsFreshUser(page);
+		if (email) createdEmails.push(email);
 		await page.goto('/matches');
 
 		// The file input is server-rendered but its change handler only exists
