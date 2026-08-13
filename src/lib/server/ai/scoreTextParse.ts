@@ -12,7 +12,16 @@ const DEFAULT_PROMPT =
 export async function parseScoreText(
 	text: string,
 	user: ServerLDUser,
-	profile: ServerLDProfile
+	profile: ServerLDProfile,
+	requestHeaders?: Headers
 ): Promise<ScoreScanResult> {
-	return runScoreCompletion(SCORE_TEXT_PARSE_CONFIG_KEY, DEFAULT_MODEL, DEFAULT_PROMPT, text, user, profile);
+	return runScoreCompletion(
+		SCORE_TEXT_PARSE_CONFIG_KEY,
+		DEFAULT_MODEL,
+		DEFAULT_PROMPT,
+		text,
+		user,
+		profile,
+		requestHeaders
+	);
 }

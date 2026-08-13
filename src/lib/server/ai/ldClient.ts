@@ -3,11 +3,10 @@ import { initAi, type LDAIClient } from '@launchdarkly/server-sdk-ai';
 import { Observability, LDObserve } from '@launchdarkly/observability-node';
 import { env } from '$env/dynamic/private';
 
-// Still lazy, so importing this module has no side effects when no SDK key is
-// configured -- the expected state today, including in the real deployment
-// (see Plan 1's "Deployment reality" notes: DEMO_MODE=true is what actually
-// runs, and no server-side LD key is set there yet). `warmLdClient()` is the
-// counterweight: when a key *is* set, hooks.server.ts calls it at module load
+// Still lazy, so importing this module has no side effects in an environment
+// with no SDK key configured (e.g. a local `npm run dev` without its own
+// `.env`). `warmLdClient()` is the counterweight: when a key *is* set (as it
+// is in the real Vercel deployment), hooks.server.ts calls it at module load
 // so the observability plugin's auto-instrumentation is in place before the
 // first request rather than starting mid-way through one.
 let clientPromise: Promise<LaunchDarkly.LDClient | null> | null = null;
@@ -47,7 +46,13 @@ async function getLdClient(): Promise<LaunchDarkly.LDClient | null> {
 		clientPromise = client
 			.waitForInitialization({ timeout: 5 })
 			.then(() => client)
-			.catch(() => null);
+			.catch((err) => {
+				// Otherwise a bad/revoked key or a cold-start network blip fails
+				// silently: every AI Config falls back to defaults and every
+				// tracker/span call no-ops, with nothing in the logs to say why.
+				console.error('LaunchDarkly server client failed to initialize', err);
+				return null;
+			});
 	}
 	return clientPromise;
 }

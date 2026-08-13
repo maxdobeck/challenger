@@ -32,7 +32,8 @@ const DEFAULT_PROMPT =
 export async function scanScoreCard(
 	imageBlob: Blob,
 	user: ServerLDUser,
-	profile: ServerLDProfile
+	profile: ServerLDProfile,
+	requestHeaders?: Headers
 ): Promise<ScoreScanResult> {
 	const imageBase64 = Buffer.from(await imageBlob.arrayBuffer()).toString('base64');
 	return runScoreCompletion(
@@ -47,6 +48,7 @@ export async function scanScoreCard(
 			{ type: 'text', text: 'Read the score tracker card in this photo.' }
 		],
 		user,
-		profile
+		profile,
+		requestHeaders
 	);
 }
