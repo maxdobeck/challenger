@@ -8,8 +8,12 @@ import { deleteE2eUsers, loginAsFreshUser } from '../helpers';
 // and only rejected when it reaches the model, which is exactly the failure a
 // one-turn test cannot see.
 //
+// It runs the conversation to completion rather than stopping at two turns, so
+// it also reaches the state the thumbs-up is gated on -- see the feedback
+// assertions at the end.
+//
 // Tagged @ai and excluded from the default suite (grep-invert "@traffic|@ai")
-// because it makes two billable model calls. Run with `npm run test:e2e:ai`.
+// because it makes three billable model calls. Run with `npm run test:e2e:ai`.
 test.describe('a multi-turn score conversation', { tag: '@ai' }, () => {
 	const createdEmails: string[] = [];
 	test.afterEach(async () => {
@@ -46,5 +50,35 @@ test.describe('a multi-turn score conversation', { tag: '@ai' }, () => {
 		const second = await send('My opponent got 3 crit, 1 kill, 2 tac.', first.history);
 		expect(second.reply).toBeTruthy();
 		expect(second.history.length).toBeGreaterThan(first.history.length);
+
+		// Naming both Primary ops is what completes a conversation: the model is
+		// told never to infer primaryOpChoice from a photo, so it stays
+		// outstanding until the player says it, and until both sides carry one
+		// the UI keeps the thumbs-up hidden behind `bothSidesReady`.
+		// Restates both sides in full rather than naming only the ops: a turn that
+		// mentions Primary alone leaves the model re-deriving the numbers from
+		// history, and it answers by asking again instead of committing a reading.
+		const third = await send(
+			'To confirm: I scored 4 crit, 2 kill, 5 tac and my Primary op is Crit. My opponent ' +
+				'scored 3 crit, 1 kill, 2 tac and their Primary op is Kill.',
+			second.history
+		);
+		expect(third.reply).toBeTruthy();
+		expect(third.you, JSON.stringify(third)).toMatchObject({ primaryOpChoice: 'crit' });
+		expect(third.opponent, JSON.stringify(third)).toMatchObject({ primaryOpChoice: 'kill' });
+
+		// The satisfied path, which nothing else covers: a thumbs-up is a separate
+		// request correlated to the run by its resumption token, so it is the one
+		// piece of the feature that can break without any turn failing. `recorded`
+		// comes back true only when LaunchDarkly accepted the feedback event
+		// against that run -- a missing or unusable token reports false rather
+		// than erroring, so asserting on it is what makes this meaningful.
+		expect(third.resumption_token, 'no resumption token to attach feedback to').toBeTruthy();
+		const feedback = await page.request.post('/matches/scan/feedback', {
+			headers: { origin },
+			data: { resumption_token: third.resumption_token, kind: 'positive' }
+		});
+		expect(feedback.status(), await feedback.text()).toBe(200);
+		expect(await feedback.json()).toMatchObject({ ok: true, recorded: true });
 	});
 });

@@ -296,11 +296,42 @@ export async function runScoreChatTurn(
 	conversationId: string,
 	requestHeaders?: Headers
 ): Promise<ScoreChatTurnResult> {
-	const context = buildServerContext(user, profile);
-	const aiClient = await getAiClient();
+	// This is the seam where LaunchDarkly decides how this turn behaves. Three
+	// things come out of the single `agentConfig` call below, and none of them
+	// are decided by this file:
+	//
+	// 1. WHICH MODEL. `aiConfig.model.name` is a model *name* served as data
+	//    ("claude-haiku-4-5-20251001"). This file still picks the provider and
+	//    the credential -- it builds an Anthropic client with an Anthropic key
+	//    a few lines down -- so LaunchDarkly can move the turn between Anthropic
+	//    models without a deploy, but choosing a non-Anthropic model there hands
+	//    an unrecognized name to that client and fails the turn. LaunchDarkly's
+	//    catalog keys models as "<Provider>.<model>", which `toAnthropicModel`
+	//    strips; it also serves models Anthropic has since retired, and those
+	//    fail the same way.
+	//
+	// 2. WHICH PROMPT. The resolved variation carries `instructions`, the
+	//    standing system prompt. Editing it in LaunchDarkly changes behaviour on
+	//    the next request, which is the whole point of putting it here rather
+	//    than in this file.
+	//
+	// 3. WHICH USERS GET WHICH. `context` is the evaluation context (see
+	//    buildServerContext: kind `user`, keyed on the user id, carrying name,
+	//    tournament history and match count). Targeting rules and percentage
+	//    rollouts run against it, so two players can be served different prompts
+	//    *and* different models on the same deploy. Bucketing is deterministic
+	//    on the context key, so one user stays on one variation -- which is why
+	//    a test suite that always signs in as the same account only ever
+	//    exercises one side of a rollout (see e2e/helpers.ts loginAsFreshUser).
+	//
+	// The values passed here are the defaults, used only when LaunchDarkly is
+	// unreachable or the config is off -- never the normal path.
+	//
 	// Agent mode (rather than the completion mode the one-shot scans use):
 	// this is a single conversational agent with standing instructions, which
 	// is what `instructions` models, not a per-call prompt template.
+	const context = buildServerContext(user, profile);
+	const aiClient = await getAiClient();
 	const aiConfig = aiClient
 		? await aiClient.agentConfig(SCORE_CHAT_CONFIG_KEY, context, {
 				model: { name: DEFAULT_MODEL },
@@ -328,6 +359,8 @@ export async function runScoreChatTurn(
 		};
 	}
 
+	// The two values LaunchDarkly actually decides for this turn, unpacked. Both
+	// fall back to the local defaults only when it had nothing to serve.
 	const modelName = toAnthropicModel(aiConfig?.model?.name, DEFAULT_MODEL);
 	const systemPrompt = aiConfig?.instructions ?? DEFAULT_PROMPT;
 	const messages = [...history, newUserMessage];
@@ -396,6 +429,14 @@ export async function runScoreChatTurn(
 			'gen_ai.response.finish_reasons': response.finishReason
 		});
 
+		// Judges are attached to the score-chat config in LaunchDarkly, so they
+		// arrive on the resolved config rather than being listed here: each entry
+		// is a key plus a sampling rate (today `toxicity` at 0.1 and
+		// `score-read-judge` at 0.5). Each of those keys is a *separate* AI
+		// Config with its own prompt and its own model -- which is why a day's
+		// token usage shows a model this file never asks for. Adding or removing
+		// a judge, or changing what it scores, is a LaunchDarkly edit; nothing
+		// here changes. See runJudges for how one is resolved and run.
 		const judges = aiConfig?.judgeConfiguration?.judges;
 		if (aiClient && judges?.length) {
 			await runJudges(aiClient, judges, tracker, context, messages, reply);
