@@ -2,28 +2,75 @@
 	import { downscaleImageForUpload } from '$lib/imageDownscale';
 
 	type Category = 'crit' | 'kill' | 'tac';
-	type Tally = { crit: number; kill: number; tac: number };
+	type ChatReading = { crit: number; kill: number; tac: number; primaryOpChoice: Category | null };
 	type ScoreResult = { crit: number; kill: number; tac: number; primary: number; primaryOpChoice: Category };
+	type ChatTurn = { role: 'user' | 'assistant'; text: string };
+	type Side = 'you' | 'opponent';
 
-	let { onConfirm }: { onConfirm: (result: ScoreResult) => void } = $props();
+	let { onConfirm }: { onConfirm: (result: { you: ScoreResult; opponent: ScoreResult }) => void } =
+		$props();
 
-	type Step = 'choose-input' | 'scanning' | 'review-tally' | 'confirm';
+	const CATEGORY_LABELS: Record<Category, string> = { crit: 'Crit', kill: 'Kill', tac: 'Tac' };
+	const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
+	const GREETING =
+		"Hi! Send a photo of your score tracker or just tell me the numbers — for you and your opponent — and I'll help you log it.";
 
-	let step = $state<Step>('choose-input');
-	let error = $state<string | null>(null);
-	let tally = $state<Tally | null>(null);
-	let primaryChoice = $state<Category | null>(null);
+	let transcript = $state<ChatTurn[]>([]);
+	// Opaque to the client: the server owns this shape (Anthropic message
+	// params, including the tool_use/tool_result pairing that gives the
+	// conversation its memory). We only store it and hand it straight back.
+	let history = $state<unknown[]>([]);
+	let you = $state<ChatReading | null>(null);
+	let opponent = $state<ChatReading | null>(null);
 	let textValue = $state('');
+	let sending = $state(false);
+	let error = $state<string | null>(null);
+	let resumptionToken = $state<string | null>(null);
+	let feedbackGiven = $state<'positive' | 'negative' | null>(null);
 
-	const derivedPrimary = $derived(
-		tally && primaryChoice ? Math.ceil(tally[primaryChoice] / 2) : 0
-	);
+	const bothSidesReady = $derived(!!you?.primaryOpChoice && !!opponent?.primaryOpChoice);
 
-	async function submitScan(formData: FormData) {
-		step = 'scanning';
+	// Keeps the newest turn in view. An attachment re-runs whenever the
+	// reactive values it reads change, so appending a turn (or flipping the
+	// thinking indicator) scrolls on its own.
+	function pinToBottom(node: HTMLElement) {
+		// Bubbles rendered below the standing greeting. Reading these is also
+		// what registers the attachment's reactive dependencies, so it re-runs
+		// on each new turn and when the thinking indicator toggles.
+		const bubbles = transcript.length + (sending ? 1 : 0);
+		if (bubbles > 0) node.scrollTop = node.scrollHeight;
+	}
+
+	function primaryFor(reading: ChatReading): number {
+		return reading.primaryOpChoice ? Math.ceil(reading[reading.primaryOpChoice] / 2) : 0;
+	}
+
+	function toResult(reading: ChatReading): ScoreResult {
+		return {
+			crit: reading.crit,
+			kill: reading.kill,
+			tac: reading.tac,
+			primary: primaryFor(reading),
+			// Only ever called behind the bothSidesReady guard, which is what
+			// establishes this is set.
+			primaryOpChoice: reading.primaryOpChoice as Category
+		};
+	}
+
+	async function sendMessage({ text, image }: { text?: string; image?: Blob }) {
+		if (sending) return;
+
+		const formData = new FormData();
+		formData.append('history', JSON.stringify(history));
+		if (text) formData.append('text', text);
+		if (image) formData.append('image', image, 'score-tracker.jpg');
+
+		transcript.push({ role: 'user', text: text ?? '📷 Photo of my score tracker' });
+		sending = true;
 		error = null;
+
 		try {
-			const res = await fetch('/matches/scan', { method: 'POST', body: formData });
+			const res = await fetch('/matches/scan/chat', { method: 'POST', body: formData });
 			if (res.status === 429) {
 				throw new Error("You've hit today's scan limit — enter these scores manually.");
 			}
@@ -32,15 +79,22 @@
 				// {message}; a platform-level rejection (e.g. a host's payload-size
 				// limit) won't be, so fall back to the generic status message.
 				const body = await res.json().catch(() => null);
-				throw new Error(body?.message ?? `Scan failed (${res.status}).`);
+				throw new Error(body?.message ?? `Chat failed (${res.status}).`);
 			}
 
 			const result = await res.json();
-			tally = { crit: result.crit_op, kill: result.kill_op, tac: result.tac_op };
-			step = 'review-tally';
+			transcript.push({ role: 'assistant', text: result.reply });
+			history = result.history;
+			you = result.you;
+			opponent = result.opponent;
+			resumptionToken = result.resumption_token;
+			// A fresh reading is a fresh thing to judge, so let the user rate it
+			// again rather than leaving the first verdict stuck to it.
+			feedbackGiven = null;
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Scan failed.';
-			step = 'choose-input';
+			error = err instanceof Error ? err.message : 'Something went wrong.';
+		} finally {
+			sending = false;
 		}
 	}
 
@@ -51,10 +105,7 @@
 
 		try {
 			const blob = await downscaleImageForUpload(file);
-
-			const formData = new FormData();
-			formData.append('image', blob, 'score-tracker.jpg');
-			await submitScan(formData);
+			await sendMessage({ image: blob });
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Could not read that photo.';
 		} finally {
@@ -62,42 +113,110 @@
 		}
 	}
 
-	async function submitText() {
-		if (!textValue.trim()) return;
-		const formData = new FormData();
-		formData.append('text', textValue.trim());
-		await submitScan(formData);
+	function submitText() {
+		const value = textValue.trim();
+		if (!value) return;
+		textValue = '';
+		sendMessage({ text: value });
 	}
 
-	function choosePrimary(category: Category) {
-		primaryChoice = category;
-		step = 'confirm';
+	// Deliberately a real turn rather than a local state flip: the model asked
+	// which op is Primary, so the answer has to actually reach it -- typing
+	// "kill" and tapping the Kill button take the identical path.
+	function choosePrimary(side: Side, category: Category) {
+		const label = CATEGORY_LABELS[category];
+		sendMessage({
+			text: side === 'you' ? `My Primary op is ${label}.` : `My opponent's Primary op is ${label}.`
+		});
+	}
+
+	async function submitFeedback(kind: 'positive' | 'negative') {
+		if (feedbackGiven) return;
+		feedbackGiven = kind;
+		try {
+			await fetch('/matches/scan/feedback', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ resumption_token: resumptionToken, kind })
+			});
+		} catch {
+			// The acknowledgement already showed; a failed rating isn't worth
+			// interrupting the flow the user is actually here for.
+		}
 	}
 
 	function confirm() {
-		if (!tally || !primaryChoice) return;
-		onConfirm({ ...tally, primary: derivedPrimary, primaryOpChoice: primaryChoice });
+		if (!you?.primaryOpChoice || !opponent?.primaryOpChoice) return;
+		onConfirm({ you: toResult(you), opponent: toResult(opponent) });
 		startOver();
 	}
 
 	function startOver() {
-		step = 'choose-input';
-		tally = null;
-		primaryChoice = null;
+		transcript = [];
+		history = [];
+		you = null;
+		opponent = null;
 		textValue = '';
 		error = null;
+		resumptionToken = null;
+		feedbackGiven = null;
 	}
 </script>
 
 <div class="score-chat card stack">
-	{#if step === 'choose-input'}
-		<p>How do you want to log your score?</p>
-		<div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-			<label>
-				Choose File / Take Photo
-				<input type="file" accept="image/*" onchange={handleFileChange} />
-			</label>
-		</div>
+	<div class="chat-history" {@attach pinToBottom}>
+		<p class="bubble assistant">{GREETING}</p>
+		{#each transcript as turn, i (i)}
+			<p class="bubble {turn.role}">{turn.text}</p>
+		{/each}
+		{#if sending}
+			<p class="bubble assistant muted">Thinking…</p>
+		{/if}
+	</div>
+
+	{#if you || opponent}
+		<dl class="reading-summary">
+			{#each [{ side: 'you' as Side, label: 'You', reading: you }, { side: 'opponent' as Side, label: 'Opponent', reading: opponent }] as entry (entry.side)}
+				<div>
+					<dt>{entry.label}</dt>
+					<dd data-testid="reading-{entry.side}">
+						{#if entry.reading}
+							Crit {entry.reading.crit} · Kill {entry.reading.kill} · Tac {entry.reading.tac}
+							{#if entry.reading.primaryOpChoice}
+								· Primary {primaryFor(entry.reading)} ({CATEGORY_LABELS[entry.reading.primaryOpChoice]})
+							{/if}
+						{:else}
+							<span class="muted">Not known yet</span>
+						{/if}
+					</dd>
+				</div>
+			{/each}
+		</dl>
+	{/if}
+
+	{#each [{ side: 'you' as Side, reading: you, label: 'Your Primary' }, { side: 'opponent' as Side, reading: opponent, label: "Opponent's Primary" }] as entry (entry.side)}
+		{#if entry.reading && !entry.reading.primaryOpChoice}
+			<div class="quick-reply" role="group" aria-label="{entry.label} op">
+				<span class="muted">Quick reply:</span>
+				{#each CATEGORIES as category (category)}
+					<button
+						type="button"
+						aria-label="{entry.label}: {CATEGORY_LABELS[category]}"
+						disabled={sending}
+						onclick={() => choosePrimary(entry.side, category)}
+					>
+						{CATEGORY_LABELS[category]}
+					</button>
+				{/each}
+			</div>
+		{/if}
+	{/each}
+
+	<div class="input-controls">
+		<label>
+			Choose File / Take Photo
+			<input type="file" accept="image/*" disabled={sending} onchange={handleFileChange} />
+		</label>
 		<form
 			class="chat-input-row"
 			onsubmit={(e) => {
@@ -105,19 +224,24 @@
 				submitText();
 			}}
 		>
-			<input
-				type="text"
-				placeholder="Type your score instead"
-				aria-label="Type your score instead"
+			<textarea
+				rows="2"
+				placeholder="Describe your score, e.g. 3 crit, 2 kill, 4 tac"
+				aria-label="Describe your score"
 				bind:value={textValue}
 				onkeydown={(e) => {
-					if (e.key === 'Enter') {
+					if (e.key === 'Enter' && !e.shiftKey) {
 						e.preventDefault();
 						submitText();
 					}
 				}}
-			/>
-			<button type="submit" class="send-button" aria-label="Send" disabled={!textValue.trim()}>
+			></textarea>
+			<button
+				type="submit"
+				class="send-button"
+				aria-label="Send"
+				disabled={sending || !textValue.trim()}
+			>
 				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
 					<path
 						d="M12 19V5M12 5L6 11M12 5l6 6"
@@ -129,24 +253,33 @@
 				</svg>
 			</button>
 		</form>
-	{:else if step === 'scanning'}
-		<p class="muted">Reading your score…</p>
-	{:else if step === 'review-tally' && tally}
-		<p>Here's what I read: CRIT {tally.crit}, KILL {tally.kill}, TAC {tally.tac}.</p>
-		<p>Which op is your Primary?</p>
-		<div style="display:flex; gap:0.5rem;">
-			<button type="button" onclick={() => choosePrimary('crit')}>Crit</button>
-			<button type="button" onclick={() => choosePrimary('kill')}>Kill</button>
-			<button type="button" onclick={() => choosePrimary('tac')}>Tac</button>
+	</div>
+
+	{#if bothSidesReady}
+		<div class="feedback-row">
+			{#if feedbackGiven}
+				<span class="muted">Thanks for the feedback!</span>
+			{:else}
+				<span class="muted">Did I get this right?</span>
+				<button
+					type="button"
+					class="button-secondary"
+					aria-label="Yes, this looks right"
+					onclick={() => submitFeedback('positive')}>👍</button
+				>
+				<button
+					type="button"
+					class="button-secondary"
+					aria-label="No, this is wrong"
+					onclick={() => submitFeedback('negative')}>👎</button
+				>
+			{/if}
 		</div>
-	{:else if step === 'confirm' && tally && primaryChoice}
-		<p>
-			Your Primary score is {derivedPrimary} (ceil({tally[primaryChoice]} / 2)), for a total of
-			{tally.crit + tally.kill + tally.tac + derivedPrimary}.
-		</p>
-		<div style="display:flex; gap:0.5rem;">
-			<button type="button" onclick={confirm}>Confirm</button>
-			<button type="button" class="button-secondary" onclick={startOver}>Start over</button>
+		<div class="action-row">
+			<button type="button" disabled={sending} onclick={confirm}>Confirm</button>
+			<button type="button" class="button-secondary" disabled={sending} onclick={startOver}>
+				Start over
+			</button>
 		</div>
 	{/if}
 
@@ -173,16 +306,78 @@
 		color: #fff;
 	}
 
-	.chat-input-row {
+	.chat-history {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		max-height: 16rem;
+		overflow-y: auto;
+		padding: 0.25rem;
+	}
+
+	.bubble {
+		margin: 0;
+		max-width: 85%;
+		padding: 0.5rem 0.75rem;
+		border-radius: 0.75rem;
+		white-space: pre-wrap;
+	}
+
+	.bubble.user {
+		align-self: flex-end;
+		background: var(--color-accent);
+		color: #fff;
+	}
+
+	.bubble.assistant {
+		align-self: flex-start;
+		background: var(--color-surface-alt, rgba(128, 128, 128, 0.15));
+	}
+
+	.reading-summary {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.75rem 1.5rem;
+		margin: 0;
+	}
+
+	.reading-summary dt {
+		font-weight: 600;
+		font-size: 0.85rem;
+	}
+
+	.reading-summary dd {
+		margin: 0;
+	}
+
+	.quick-reply,
+	.feedback-row,
+	.action-row {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
+		flex-wrap: wrap;
 	}
 
-	.chat-input-row input {
+	.input-controls {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.chat-input-row {
+		display: flex;
+		align-items: flex-end;
+		gap: 0.5rem;
+	}
+
+	.chat-input-row textarea {
 		flex: 1;
-		border-radius: 999px;
+		min-width: 0;
+		resize: vertical;
+		border-radius: 0.75rem;
 		padding: 0.6rem 1rem;
+		font: inherit;
 	}
 
 	.send-button {

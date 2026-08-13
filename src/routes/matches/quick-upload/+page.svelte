@@ -28,15 +28,21 @@
 </script>
 
 <h1>Quick Upload</h1>
-<p class="muted">Scan a photo of your score tracker, or describe it — then confirm to log the match.</p>
+<p class="muted">
+	Chat through both players' scores — send a photo or describe them — then confirm to log the match.
+</p>
 
 <ScoreChat
 	onConfirm={(result) => {
-		player1.crit = result.crit;
-		player1.kill = result.kill;
-		player1.tac = result.tac;
-		player1.primary = result.primary;
-		player1.primaryOpChoice = result.primaryOpChoice;
+		player1.crit = result.you.crit;
+		player1.kill = result.you.kill;
+		player1.tac = result.you.tac;
+		player1.primary = result.you.primary;
+		player1.primaryOpChoice = result.you.primaryOpChoice;
+		player2.crit = result.opponent.crit;
+		player2.kill = result.opponent.kill;
+		player2.tac = result.opponent.tac;
+		player2.primaryOpChoice = result.opponent.primaryOpChoice;
 	}}
 />
 
