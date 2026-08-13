@@ -1,9 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import {
+	generateText,
+	jsonSchema,
+	tool,
+	type JSONSchema7,
+	type ModelMessage,
+	type UserContent
+} from 'ai';
+import { getAIMetricsFromResponse } from '@launchdarkly/server-sdk-ai-vercel';
 import {
 	LDFeedbackKind,
 	type LDAIClient,
 	type LDAIConfigTracker,
-	type LDJudge
+	type LDJudge,
+	type LDMessage
 } from '@launchdarkly/server-sdk-ai';
 import type { LDContext } from '@launchdarkly/node-server-sdk';
 import { env } from '$env/dynamic/private';
@@ -40,7 +50,7 @@ export type ChatReading = {
 	primaryOpChoice: Category | null;
 };
 
-const READING_PROPERTIES = {
+const READING_PROPERTIES: Record<string, JSONSchema7> = {
 	known: {
 		type: 'boolean',
 		description:
@@ -64,10 +74,10 @@ const READING_PROPERTIES = {
 // that's what makes the structured extraction reliable. Carrying the
 // conversational `reply` inside the tool call is what lets a forced call still
 // ask a follow-up question instead of only ever reporting a finished reading.
-const SCORE_CHAT_TOOL = {
-	name: 'update_score_chat',
+const SCORE_CHAT_TOOL_NAME = 'update_score_chat';
+const SCORE_CHAT_TOOL = tool({
 	description: "Reply to the user and report your current best understanding of both players' scores.",
-	input_schema: {
+	inputSchema: jsonSchema({
 		type: 'object',
 		properties: {
 			reply: {
@@ -84,23 +94,8 @@ const SCORE_CHAT_TOOL = {
 			}
 		},
 		required: ['reply', 'you', 'opponent']
-	}
-} satisfies Anthropic.Tool;
-
-// Judges score a reply on a 0-1 scale. Same forced-tool trick as the score
-// tool: a structured result beats parsing a number out of prose.
-const JUDGE_TOOL = {
-	name: 'record_evaluation',
-	description: 'Record the evaluation score and the reasoning behind it.',
-	input_schema: {
-		type: 'object',
-		properties: {
-			score: { type: 'number', description: 'Score between 0.0 and 1.0, per the rubric.' },
-			reasoning: { type: 'string', description: 'Brief justification for the score.' }
-		},
-		required: ['score', 'reasoning']
-	}
-} satisfies Anthropic.Tool;
+	})
+});
 
 // LaunchDarkly's model catalog keys models as "<Provider>.<model>" (e.g.
 // "Anthropic.claude-sonnet-4-5"). The SDK normally hands back the bare API id
@@ -138,7 +133,7 @@ export type ScoreChatTurnResult = {
 	reply: string;
 	you: ChatReading | null;
 	opponent: ChatReading | null;
-	history: Anthropic.Messages.MessageParam[];
+	history: ModelMessage[];
 	resumptionToken: string | null;
 };
 
@@ -148,16 +143,14 @@ export type ScoreChatTurnResult = {
 // paying to re-upload it for the rest of the conversation.
 const PHOTO_PLACEHOLDER = '[photo of a score tracker — already read]';
 
-function stripImages(
-	message: Anthropic.Messages.MessageParam
-): Anthropic.Messages.MessageParam {
+function stripImages(message: ModelMessage): ModelMessage {
 	if (typeof message.content === 'string') return message;
 	return {
 		...message,
-		content: message.content.map((block) =>
-			block.type === 'image' ? { type: 'text' as const, text: PHOTO_PLACEHOLDER } : block
+		content: message.content.map((part) =>
+			part.type === 'image' ? { type: 'text' as const, text: PHOTO_PLACEHOLDER } : part
 		)
-	};
+	} as ModelMessage;
 }
 
 // The browser round-trips this history back to us on every turn, so it is
@@ -166,71 +159,67 @@ function stripImages(
 export const MAX_HISTORY_CHARS = 256 * 1024;
 const MAX_HISTORY_MESSAGES = 60;
 
-function isMessageParam(value: unknown): value is Anthropic.Messages.MessageParam {
+// `system` is excluded deliberately: the client never legitimately holds one,
+// so accepting it back would let a resend inject instructions.
+function isModelMessage(value: unknown): value is ModelMessage {
 	if (!value || typeof value !== 'object') return false;
 	const message = value as Record<string, unknown>;
-	if (message.role !== 'user' && message.role !== 'assistant') return false;
+	if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'tool') {
+		return false;
+	}
 	if (typeof message.content === 'string') return message.content.length > 0;
 	return Array.isArray(message.content) && message.content.length > 0;
 }
 
-function isToolResultTurn(message: Anthropic.Messages.MessageParam): boolean {
-	return (
-		Array.isArray(message.content) && message.content.some((block) => block.type === 'tool_result')
-	);
-}
-
 /**
- * Coerces client-supplied history into something safe to send to Anthropic.
+ * Coerces client-supplied history into something safe to send to the model.
  *
- * Drops anything that isn't a well-formed message, strips image blocks (we
+ * Drops anything that isn't a well-formed message, strips image parts (we
  * replaced every image we've seen with a placeholder before handing history
  * back, so an image here is a replay or an injection -- and re-uploading bytes
  * is exactly the cost this design avoids), and caps the length. Trimming the
- * head can orphan a tool_result whose tool_use is now gone, which Anthropic
+ * head can orphan a tool result whose tool call is now gone, which the API
  * rejects, so the trimmed history is realigned to start on a real user turn.
  */
-export function sanitizeHistory(raw: unknown): Anthropic.Messages.MessageParam[] {
+export function sanitizeHistory(raw: unknown): ModelMessage[] {
 	if (!Array.isArray(raw)) return [];
 
-	const messages = raw.filter(isMessageParam).map(stripImages).slice(-MAX_HISTORY_MESSAGES);
-	const start = messages.findIndex(
-		(message) => message.role === 'user' && !isToolResultTurn(message)
-	);
+	const messages = raw.filter(isModelMessage).map(stripImages).slice(-MAX_HISTORY_MESSAGES);
+	const start = messages.findIndex((message) => message.role === 'user');
 	return start === -1 ? [] : messages.slice(start);
 }
 
-// Renders the conversation as plain "role: text" lines for a judge to read.
-// Image and tool_use/tool_result blocks are dropped -- a judge is scoring the
-// assistant's words, and the raw blocks are noise it can't use.
-function renderHistory(messages: Anthropic.Messages.MessageParam[]): string {
+// Flattens the conversation to one plain-text message per turn for a judge to
+// read. Image and tool parts are dropped -- a judge is scoring the assistant's
+// words, and the raw parts are noise it can't use. The judge renders these as
+// "<role>: <content>" itself, so they must stay one message per turn.
+function toJudgeMessages(messages: ModelMessage[]): LDMessage[] {
 	return messages
 		.map((message) => {
-			const text =
+			const content =
 				typeof message.content === 'string'
 					? message.content
 					: message.content
-							.filter((block) => block.type === 'text')
-							.map((block) => (block as Anthropic.Messages.TextBlockParam).text)
+							.filter((part) => part.type === 'text')
+							.map((part) => part.text)
 							.join(' ');
-			return text ? `${message.role}: ${text}` : '';
+			return { role: message.role, content };
 		})
-		.filter(Boolean)
-		.join('\n');
+		.filter((message): message is LDMessage => message.role !== 'tool' && !!message.content);
 }
 
 /**
  * Runs the judges attached to the AI Config against this turn's reply.
  *
- * The SDK's own `createJudge()` can't be used here: it builds its runner from
- * `SUPPORTED_AI_PROVIDERS` (openai / langchain / vercel), and this config's
- * provider is Anthropic, so it returns undefined and every judge silently
- * never runs. Rather than pull in a provider stack purely to re-reach the
- * Anthropic API we already talk to, this resolves each judge's config through
- * LaunchDarkly -- which interpolates the reserved `message_history` and
- * `response_to_evaluate` variables into its prompt -- and scores it with the
- * existing client, reporting through `trackJudgeResult` exactly as the SDK
- * would.
+ * `createJudge` builds its runner from `SUPPORTED_AI_PROVIDERS` (openai /
+ * langchain / vercel), which is why this turn talks to Anthropic through the
+ * Vercel AI SDK rather than Anthropic's own client: it makes 'vercel' a usable
+ * provider here, and the SDK then owns sampling, the reserved
+ * message_history / response_to_evaluate prompt shape, the structured
+ * score/reasoning schema, and the judge's own token metrics.
+ *
+ * Unsampled results are not tracked, matching what the SDK does for judges it
+ * runs itself.
  *
  * Awaited rather than fired-and-forgotten: an un-awaited promise is not
  * guaranteed to survive a serverless response, and losing the events defeats
@@ -240,61 +229,34 @@ function renderHistory(messages: Anthropic.Messages.MessageParam[]): string {
 async function runJudges(
 	aiClient: LDAIClient,
 	// Note the SDK names this field `key`, while the REST API calls the same
-	// thing `judgeConfigKey` -- as does trackJudgeResult below.
+	// thing `judgeConfigKey` -- as does trackJudgeResult.
 	judges: LDJudge[],
 	tracker: LDAIConfigTracker | undefined,
 	context: LDContext,
-	anthropic: Anthropic,
-	messages: Anthropic.Messages.MessageParam[],
+	messages: ModelMessage[],
 	reply: string
 ): Promise<void> {
+	const judgeMessages = toJudgeMessages(messages);
 	await Promise.all(
 		judges.map(async ({ key: judgeConfigKey, samplingRate }) => {
-			if (Math.random() >= (samplingRate ?? 1)) {
-				tracker?.trackJudgeResult({ judgeConfigKey, success: true, sampled: false });
-				return;
-			}
 			try {
-				const judge = await aiClient.judgeConfig(judgeConfigKey, context);
-				if (!judge?.enabled) return;
-
-				// LaunchDarkly serves only the judge's system prompt: the
-				// message_history / response_to_evaluate turns are reserved and
-				// built by the caller (passing them as variables is explicitly
-				// ignored). This reproduces the shape its stored template
-				// expects, as a single user turn.
-				const system = (judge.messages ?? [])
-					.filter((m) => m.role === 'system')
-					.map((m) => m.content)
-					.join('\n\n');
-				const body =
-					`MESSAGE HISTORY:\n${renderHistory(messages)}\n\n` +
-					`RESPONSE TO EVALUATE:\n${reply}`;
-
-				const response = await anthropic.messages.create({
-					model: toAnthropicModel(judge.model?.name, DEFAULT_MODEL),
-					max_tokens: 512,
-					system,
-					tools: [JUDGE_TOOL],
-					tool_choice: { type: 'tool', name: JUDGE_TOOL.name },
-					messages: [{ role: 'user', content: body }]
-				});
-
-				const toolUse = response.content.find((block) => block.type === 'tool_use');
-				const input = toolUse?.type === 'tool_use' ? (toolUse.input as Record<string, unknown>) : {};
-				const rawScore = input.score;
-				if (typeof rawScore !== 'number' || !Number.isFinite(rawScore)) {
-					throw new Error('Judge did not return a numeric score.');
-				}
-
-				tracker?.trackJudgeResult({
+				const judge = await aiClient.createJudge(
 					judgeConfigKey,
-					success: true,
-					sampled: true,
-					metricKey: judge.evaluationMetricKey,
-					score: Math.min(1, Math.max(0, rawScore)),
-					reasoning: typeof input.reasoning === 'string' ? input.reasoning : undefined
+					context,
+					undefined,
+					undefined,
+					'vercel',
+					samplingRate
+				);
+				// Undefined when the judge is disabled or its provider can't be
+				// resolved -- neither is an error worth reporting as a failed run.
+				if (!judge) return;
+
+				const result = await judge.evaluateMessages(judgeMessages, {
+					content: reply,
+					metrics: { success: true }
 				});
+				if (result.sampled) tracker?.trackJudgeResult(result);
 			} catch (err) {
 				console.error(`Judge ${judgeConfigKey} failed`, err);
 				tracker?.trackJudgeResult({
@@ -327,10 +289,11 @@ function mockReading(): ChatReading {
  * browser's trace context into the span this opens -- see `withLlmSpan`.
  */
 export async function runScoreChatTurn(
-	history: Anthropic.Messages.MessageParam[],
-	newUserContent: Anthropic.Messages.MessageParam['content'],
+	history: ModelMessage[],
+	newUserContent: UserContent,
 	user: ServerLDUser,
 	profile: ServerLDProfile,
+	conversationId: string,
 	requestHeaders?: Headers
 ): Promise<ScoreChatTurnResult> {
 	const context = buildServerContext(user, profile);
@@ -345,7 +308,7 @@ export async function runScoreChatTurn(
 			})
 		: null;
 	const tracker = aiConfig?.createTracker();
-	const newUserMessage: Anthropic.Messages.MessageParam = { role: 'user', content: newUserContent };
+	const newUserMessage: ModelMessage = { role: 'user', content: newUserContent };
 
 	if (!env.ANTHROPIC_API_KEY) {
 		tracker?.trackSuccess();
@@ -369,80 +332,100 @@ export async function runScoreChatTurn(
 	const systemPrompt = aiConfig?.instructions ?? DEFAULT_PROMPT;
 	const messages = [...history, newUserMessage];
 
-	try {
-		// The whole turn -- the reply generation *and* the judge calls it
-		// triggers -- runs inside one span, so a trace shows the judging as
-		// part of the turn that caused it rather than as unrelated roots. The
-		// span is also what lets LaunchDarkly associate the trace with the
-		// evaluated AI Config: the `track` calls below record metrics, but
-		// metrics alone carry no trace association.
-		return await withLlmSpan('llm.chat', requestHeaders, async (setSpanAttributes) => {
-			setSpanAttributes({
-				'launchdarkly.ai.config.key': SCORE_CHAT_CONFIG_KEY,
-				'gen_ai.request.model': modelName,
-				'gen_ai.system': 'anthropic'
-			});
+	// The whole turn -- the reply generation *and* the judge calls it triggers --
+	// runs inside one span, so a trace shows the judging as part of the turn that
+	// caused it rather than as unrelated roots. The span is also what lets
+	// LaunchDarkly associate the trace with the evaluated AI Config: the tracker
+	// records metrics, but metrics alone carry no trace association.
+	return withLlmSpan('llm.chat', requestHeaders, async (setSpanAttributes) => {
+		setSpanAttributes({
+			'launchdarkly.ai.config.key': SCORE_CHAT_CONFIG_KEY,
+			// LaunchDarkly only renders a span as an LLM trace when it carries the
+			// GenAI semantic-convention attributes, and only groups spans into a
+			// conversation when they share `gen_ai.conversation.id` -- the one
+			// attribute it treats as required. `provider.name` is what it costs a
+			// call against; `system` is the older spelling of the same thing, kept
+			// because the observability plugin still reads it.
+			'gen_ai.conversation.id': conversationId,
+			'gen_ai.operation.name': 'chat',
+			'gen_ai.provider.name': 'anthropic',
+			'gen_ai.request.model': modelName,
+			'gen_ai.system': 'anthropic'
+		});
 
-			const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
-			const start = Date.now();
-			const response = await anthropic.messages.create({
-				model: modelName,
+		const model = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY })(modelName);
+		// Extracting the reply inside the tracked call is deliberate: a response
+		// that arrives without one is a failed run, and trackMetricsOf only sees
+		// that if the throw happens within its callback.
+		const call = async () => {
+			const response = await generateText({
+				model,
 				// Roomier than the one-shot scans' 256: replies now carry real
 				// conversational text alongside the structured reading.
-				max_tokens: 512,
+				maxOutputTokens: 512,
 				system: systemPrompt,
-				tools: [SCORE_CHAT_TOOL],
-				tool_choice: { type: 'tool', name: SCORE_CHAT_TOOL.name },
+				tools: { [SCORE_CHAT_TOOL_NAME]: SCORE_CHAT_TOOL },
+				toolChoice: { type: 'tool', toolName: SCORE_CHAT_TOOL_NAME },
 				messages
 			});
-			tracker?.trackDuration(Date.now() - start);
-			tracker?.trackTokens({
-				total: (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0),
-				input: response.usage?.input_tokens ?? 0,
-				output: response.usage?.output_tokens ?? 0
-			});
-			setSpanAttributes({
-				'gen_ai.usage.input_tokens': response.usage?.input_tokens ?? 0,
-				'gen_ai.usage.output_tokens': response.usage?.output_tokens ?? 0
-			});
-
-			const toolUse = response.content.find((block) => block.type === 'tool_use');
-			if (toolUse?.type !== 'tool_use') {
+			const toolCall = response.toolCalls[0];
+			if (!toolCall) {
 				throw new Error('Model did not return a structured reply.');
 			}
-			const input = toolUse.input as Record<string, unknown>;
+			const input = toolCall.input as Record<string, unknown>;
 			const reply = typeof input.reply === 'string' ? input.reply : '';
 			if (!reply) {
 				throw new Error('Model did not return a reply.');
 			}
+			return { response, toolCall, input, reply };
+		};
 
-			tracker?.trackSuccess();
+		const { response, toolCall, input, reply } = tracker
+			? await tracker.trackMetricsOf((r) => getAIMetricsFromResponse(r.response), call)
+			: await call();
 
-			const judges = aiConfig?.judgeConfiguration?.judges;
-			if (aiClient && judges?.length) {
-				await runJudges(aiClient, judges, tracker, context, anthropic, messages, reply);
-			}
-
-			return {
-				reply,
-				you: parseReading(input.you),
-				opponent: parseReading(input.opponent),
-				history: [
-					...history,
-					stripImages(newUserMessage),
-					{ role: 'assistant', content: response.content },
-					{
-						role: 'user' as const,
-						content: [{ type: 'tool_result' as const, tool_use_id: toolUse.id, content: 'ok' }]
-					}
-				],
-				resumptionToken: tracker?.resumptionToken ?? null
-			};
+		// Cache counts are broken out because LaunchDarkly prices cached input
+		// differently from fresh input, and Anthropic serves most of a
+		// conversation's history from cache by the third or fourth turn.
+		const inputDetails = response.usage?.inputTokenDetails;
+		setSpanAttributes({
+			'gen_ai.usage.input_tokens': response.usage?.inputTokens ?? 0,
+			'gen_ai.usage.output_tokens': response.usage?.outputTokens ?? 0,
+			'gen_ai.usage.cache_read.input_tokens': inputDetails?.cacheReadTokens ?? 0,
+			'gen_ai.usage.cache_creation.input_tokens': inputDetails?.cacheWriteTokens ?? 0,
+			'gen_ai.response.finish_reasons': response.finishReason
 		});
-	} catch (err) {
-		tracker?.trackError();
-		throw err;
-	}
+
+		const judges = aiConfig?.judgeConfiguration?.judges;
+		if (aiClient && judges?.length) {
+			await runJudges(aiClient, judges, tracker, context, messages, reply);
+		}
+
+		return {
+			reply,
+			you: parseReading(input.you),
+			opponent: parseReading(input.opponent),
+			history: [
+				...history,
+				stripImages(newUserMessage),
+				...response.response.messages,
+				// Every tool call has to be answered before the conversation can
+				// continue, so the turn closes itself out with a synthetic result.
+				{
+					role: 'tool' as const,
+					content: [
+						{
+							type: 'tool-result' as const,
+							toolCallId: toolCall.toolCallId,
+							toolName: SCORE_CHAT_TOOL_NAME,
+							output: { type: 'text' as const, value: 'ok' }
+						}
+					]
+				}
+			],
+			resumptionToken: tracker?.resumptionToken ?? null
+		};
+	});
 }
 
 /**

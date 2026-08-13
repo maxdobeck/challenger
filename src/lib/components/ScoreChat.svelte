@@ -34,6 +34,11 @@
 	// params, including the tool_use/tool_result pairing that gives the
 	// conversation its memory). We only store it and hand it straight back.
 	let history = $state<unknown[]>([]);
+	// Groups every turn's server-side span under one conversation in
+	// LaunchDarkly's trace view. Generated lazily rather than at init because
+	// this component server-renders, and cleared alongside the history so a
+	// fresh conversation is a fresh trace group.
+	let conversationId: string | null = null;
 	let you = $state<ChatReading | null>(null);
 	let opponent = $state<ChatReading | null>(null);
 	let textValue = $state('');
@@ -86,8 +91,11 @@
 	async function sendMessage({ text, image }: { text?: string; image?: Blob }) {
 		if (sending) return;
 
+		conversationId ??= crypto.randomUUID();
+
 		const formData = new FormData();
 		formData.append('history', JSON.stringify(history));
+		formData.append('conversation_id', conversationId);
 		if (text) formData.append('text', text);
 		if (image) formData.append('image', image, 'score-tracker.jpg');
 
@@ -184,6 +192,7 @@
 	function startOver() {
 		transcript = [];
 		history = [];
+		conversationId = null;
 		you = null;
 		opponent = null;
 		textValue = '';

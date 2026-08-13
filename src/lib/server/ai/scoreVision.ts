@@ -41,10 +41,7 @@ export async function scanScoreCard(
 		DEFAULT_MODEL,
 		DEFAULT_PROMPT,
 		[
-			{
-				type: 'image',
-				source: { type: 'base64', media_type: resolveMediaType(imageBlob), data: imageBase64 }
-			},
+			{ type: 'image', image: imageBase64, mediaType: resolveMediaType(imageBlob) },
 			{ type: 'text', text: 'Read the score tracker card in this photo.' }
 		],
 		user,

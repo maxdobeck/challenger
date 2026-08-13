@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { loginAsMax } from '../helpers';
+import { deleteE2eUsers, loginAsFreshUser } from '../helpers';
 
 // Every other Quick Upload test (e2e/quick-upload-chat.e2e.ts) mocks
 // /matches/scan/chat wholesale, which means the server-side half of a photo
@@ -20,6 +20,11 @@ import { loginAsMax } from '../helpers';
 // optionally a billable model call. Run deliberately with
 // `npm run test:e2e:ai`.
 test.describe('sending a real photo through the score chat', { tag: '@ai' }, () => {
+	const createdEmails: string[] = [];
+	test.afterEach(async () => {
+		await deleteE2eUsers(createdEmails.splice(0));
+	});
+
 	test('a photo turn reaches the chat endpoint and comes back as a reading', async ({ page }) => {
 		// The 60s expect timeouts below are unreachable under Playwright's
 		// default 30s per-test budget, so the test always timed out before its
@@ -29,7 +34,8 @@ test.describe('sending a real photo through the score chat', { tag: '@ai' }, () 
 		const pageErrors: Error[] = [];
 		page.on('pageerror', (err) => pageErrors.push(err));
 
-		await loginAsMax(page);
+		const email = await loginAsFreshUser(page);
+		if (email) createdEmails.push(email);
 		await page.goto('/matches/quick-upload');
 
 		// The file input is server-rendered but its change handler only exists

@@ -1,6 +1,6 @@
 import { error, json, type Cookies } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import type Anthropic from '@anthropic-ai/sdk';
+import type { ModelMessage, UserContent } from 'ai';
 import { env } from '$env/dynamic/private';
 import { resolveMediaType } from '$lib/server/ai/scoreVision';
 import { runScoreChatTurn, sanitizeHistory, MAX_HISTORY_CHARS } from '$lib/server/ai/scoreChat';
@@ -28,7 +28,7 @@ async function recordAttempt(userId: string, cookies: Cookies): Promise<void> {
 	}
 }
 
-function parseHistoryField(raw: FormDataEntryValue | null): Anthropic.Messages.MessageParam[] {
+function parseHistoryField(raw: FormDataEntryValue | null): ModelMessage[] {
 	if (typeof raw !== 'string' || !raw) return [];
 	if (raw.length > MAX_HISTORY_CHARS) {
 		error(400, 'This conversation has gotten too long — start over.');
@@ -40,6 +40,17 @@ function parseHistoryField(raw: FormDataEntryValue | null): Anthropic.Messages.M
 		error(400, 'Malformed conversation history.');
 	}
 	return sanitizeHistory(parsed);
+}
+
+// The client keeps one id for the life of a conversation so every turn's span
+// groups under it. Like the history beside it that is untrusted input, and it
+// ends up on a span rather than in a query, so anything that isn't the UUID we
+// handed out is replaced instead of rejected -- a bad id is not worth failing a
+// turn over, but it is not worth tracing under either.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseConversationId(raw: FormDataEntryValue | null): string {
+	return typeof raw === 'string' && UUID_PATTERN.test(raw) ? raw : crypto.randomUUID();
 }
 
 export const POST: RequestHandler = async (event) => {
@@ -57,6 +68,7 @@ export const POST: RequestHandler = async (event) => {
 	const image = formData.get('image');
 	const text = formData.get('text')?.toString().trim();
 	const history = parseHistoryField(formData.get('history'));
+	const conversationId = parseConversationId(formData.get('conversation_id'));
 	const hasImage = image instanceof Blob && image.size > 0;
 	if (!hasImage && !text) {
 		error(400, 'No image or text provided');
@@ -65,16 +77,13 @@ export const POST: RequestHandler = async (event) => {
 		error(400, 'Image is too large.');
 	}
 
-	const content: Anthropic.Messages.ContentBlockParam[] = [];
+	const content: Extract<UserContent, unknown[]> = [];
 	if (hasImage) {
 		const blob = image as Blob;
 		content.push({
 			type: 'image',
-			source: {
-				type: 'base64',
-				media_type: resolveMediaType(blob),
-				data: Buffer.from(await blob.arrayBuffer()).toString('base64')
-			}
+			image: Buffer.from(await blob.arrayBuffer()).toString('base64'),
+			mediaType: resolveMediaType(blob)
 		});
 	}
 	content.push({ type: 'text', text: text || IMAGE_ONLY_PROMPT });
@@ -84,7 +93,14 @@ export const POST: RequestHandler = async (event) => {
 
 	let result;
 	try {
-		result = await runScoreChatTurn(history, content, ldUser, profile, event.request.headers);
+		result = await runScoreChatTurn(
+			history,
+			content,
+			ldUser,
+			profile,
+			conversationId,
+			event.request.headers
+		);
 	} catch (err) {
 		await recordAttempt(user.id, event.cookies);
 		console.error('Score chat turn failed', err);
