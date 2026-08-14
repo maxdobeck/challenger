@@ -33,9 +33,15 @@ async function getLdClient(): Promise<LaunchDarkly.LDClient | null> {
 					// backend span it triggered land under one service. The
 					// version is the deploy's git SHA, matching the sourcemaps
 					// uploaded by `vercel-build`.
+					//
+					// `environment` comes from the same build-time constant as
+					// the browser's rather than from runtime env: read at
+					// runtime, a CI test run reports 'development' here while
+					// the browser half of the very same run reports 'ci', which
+					// splits one request's spans across two environments.
 					serviceName: 'challenger',
 					serviceVersion: __APP_VERSION__,
-					environment: env.VERCEL_ENV || 'development'
+					environment: __APP_ENVIRONMENT__
 				})
 			]
 		});
