@@ -1,36 +1,31 @@
 # Challenger
 
-A Kill Team tournament tracker — login, the full team list, player-vs-player match logging with Kill Team's VP scoring (crit/tac/kill/primary), per-team stats, tournaments, and a leaderboard. It doubles as a LaunchDarkly demo app: client-side flags and experiments, AI Configs driving the score-scan features, plus Observability and Session Replay.
+A Kill Team tournament tracker — login, the full team list, player-vs-player match logging with Kill Team's VP scoring (crit/tac/kill/primary), per-team stats, tournaments, and a leaderboard. 
 
-Built with SvelteKit, Drizzle ORM + Postgres, better-auth, and the Anthropic models via the Vercel AI SDK.
+## Ways to run Challenger
 
-## Ways to run it
-
-Four, in increasing order of setup:
+In increasing order of effort:
 
 | # | Way | What you run | Data | Setup |
 | --- | --- | --- | --- | --- |
-| 1 | [Hosted demo](#1-hosted-demo) | <https://challenger-phi.vercel.app/> | In-memory (per serverless instance) | None |
+| 1 | [Publicly Available Demo Site](#1-hosted-demo) | <https://challenger-phi.vercel.app/> | In-memory (per serverless instance) | None |
 | 2 | [Demo mode, locally](#2-demo-mode-locally) | `npm run dev:demo` | In-memory (per server process) | `npm install` |
-| 3 | [Full local stack](#3-full-local-stack) | `npm run launch` | Postgres via Docker | `.env` + Docker |
-| 4 | [Production build locally](#4-production-build-locally) | `npm run build && npm run preview` | Whichever of the above you configured | As above |
+| 3 | [Full local stack](#3-full-local-stack) | `npm run launch` | Postgres via Docker, build, database seed, etc | `.env` + Docker |
 
-Every mode runs the same UI. What changes is where the data lives and how auth works.
+Every mode runs the same UI. What changes is where the data lives and how auth works. 
 
 ---
 
 ## 1. Hosted demo
 
-**<https://challenger-phi.vercel.app/>** — nothing to install, publicly reachable (no Vercel SSO in front of it).
+Follow this link to the Demo Site: **<https://challenger-phi.vercel.app/>**
 
 It's a demo-mode build: [`vercel.json`](vercel.json) sets `DEMO_MODE=true` at build and runtime, so there's no database and no `DATABASE_URL`. Log in from the account dropdown on `/login` — the curated roster in [`demo-fixtures.ts`](src/lib/server/db/demo-fixtures.ts) (Max, test1, testTourney, then 12 tournament players and the casual-only cohort).
 
-Two things behave differently from a local run:
+Some things behave differently from a local run with a database:
 
-- **Writes are per-instance and temporary.** A logged match lives in that serverless instance's memory. Another instance — or the same one after a cold start — won't have it. [`src/lib/server/demo/kv.ts`](src/lib/server/demo/kv.ts) can back demo writes with Upstash Redis if `KV_REST_API_URL` / `KV_REST_API_TOKEN` are provisioned; they currently aren't, so it no-ops.
-- **AI scans return placeholder scores** unless `ANTHROPIC_API_KEY` is set in the Vercel project. Without a key the server skips the model call and returns randomized crit/kill/tac values — still reporting to LaunchDarkly, just not actually reading your photo.
-
-Client-side LaunchDarkly is live either way: `PUBLIC_LD_CLIENT_ID` points at the `challenger` production LD environment, so the hosted demo emits real flag evaluations, experiment exposures, and session replays.
+- Everything is temporary. Data is ephemeral and often stored in memory or in cookies. When you logout or close the tab the data is gone. Purely a demo website. 
+- Client-side LaunchDarkly is live either way: `PUBLIC_LD_CLIENT_ID` points at the `challenger` production LD environment, so the hosted demo emits real flag evaluations, experiment exposures, and session replays.
 
 ## 2. Demo mode, locally
 
@@ -39,11 +34,11 @@ npm install
 npm run dev:demo
 ```
 
-No Docker, no Postgres, no `.env` file. `vite dev --mode demo` loads [`.env.demo`](.env.demo) (`DEMO_MODE=true`) and the app runs against an in-memory dataset built by [`src/lib/server/demo/data.ts`](src/lib/server/demo/data.ts) — the same team list, players, tournaments and match-generation logic as the real seed script, from a fixed PRNG seed so every start produces an identical dataset.
+No Docker, no Postgres, no `.env` file. `vite dev --mode demo` loads [`.env.demo`](.env.demo) (`DEMO_MODE=true`) and the app runs against an in-memory dataset built by [`src/lib/server/demo/data.ts`](src/lib/server/demo/data.ts) — the same team list, players, tournaments and match-generation logic as the real seed script(database mode), from a fixed seed so every start produces an identical dataset.
 
 Open <http://localhost:5173> and log in on `/login`:
 
-- **The demo-account dropdown** signs you in as any curated account with one click.
+- **The demo-account dropdown** signs you in as any curated account with one click. You should be able to sign out and login as other accounts (different flags apply)
 - **The email/password form** accepts *any* account in the in-memory dataset (all of `FAKE_PLAYERS` and `CASUAL_PLAYERS`, not just the curated subset) — in demo mode the password isn't checked for those, since there's no database to check it against. Accounts you create through `/register` are real in-memory identities and *do* get their password verified.
 
 Logged matches survive until you stop the server. Restart and you're back to the baseline dataset.
@@ -52,17 +47,29 @@ The masthead reads **"Challenger: DEMO_MODE"** so you always know which mode you
 
 ## 3. Full local stack
 
-The real thing: Postgres, better-auth, persistent data.
+The real thing: Postgres, better-auth(a package), persistent data.
 
-1. **Prerequisites**: Node.js 22+, npm, and Docker (for local Postgres).
+1. **Prerequisites**: Node.js 22+, npm, and Docker (for local Postgres database).
 2. **Install dependencies**:
    ```sh
    npm install
+   npm run build
    ```
 3. **Configure environment**: copy `.env.example` to `.env` and fill in `BETTER_AUTH_SECRET` (any random string for local dev, e.g. `openssl rand -hex 32`). The default `DATABASE_URL` already matches [`compose.yaml`](compose.yaml). Everything else in the file is optional — see [Environment variables](#environment-variables).
    ```sh
    cp .env.example .env
    ```
+   There are five environemnt variables to obtain:
+   - `DATABASE_URL="postgres://root:mysecretpassword@localhost:5432/local"`: This one is hardcoded, should copy-paste this as-is.
+
+   - `BETTER_AUTH_SECRET`:  Generate in [the steps here](https://better-auth.com/docs/installation) or with `openssl rand -base64 32`
+
+   - `PUBLIC_LD_CLIENT_ID`: From your Launch Darkly project. OK to hardcode as its public.
+
+   - `LAUNCHDARKLY_SDK_KEY`: Also [from your project](https://launchdarkly.com/docs/home/account/environment/keys#create-sdk-credentials), this one is secret!
+
+   - `ANTHROPIC_API_KEY`: [optional]For your API calls to examine images or put in the score with AI assistance.
+
 4. **Launch**:
    ```sh
    npm run launch
@@ -113,6 +120,14 @@ Every one of these is optional except where a mode requires it — the app degra
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Persisting demo-mode writes across serverless instances | Demo writes stay in per-process memory |
 | `LD_ACCESS_TOKEN` | Uploading sourcemaps at deploy time | Production stack traces in LD stay minified |
 
+## LD Features of note
+- Flags by segment
+- Flags by hardcoded user context
+- AI judges and observation(AI Config)
+- Telemetry: sourcemap uploads for when errors happen
+- An experiment to see if a call-to-action is working
+- Telemetry: some metrics, frustration clicks
+
 ## AI features
 
 Score scanning is backed by three completion-mode LaunchDarkly AI Configs, each resolved at request time (model and system prompt both come from LD, with in-code defaults as the fallback):
@@ -157,21 +172,6 @@ The e2e suite runs in whichever mode is configured, and [`playwright.config.ts`]
 | `npm run auth:schema` | Regenerate the better-auth Drizzle schema after changing `src/lib/server/auth.ts` |
 | `npm run check` | Type-check with `svelte-check` |
 | `npm run lint` / `lint:fix` | ESLint (typescript-eslint + eslint-plugin-svelte) |
-
-## Deployment
-
-Deployed to Vercel via `adapter-auto`. `npm run vercel-build` builds and then runs [`scripts/upload-sourcemaps.mjs`](scripts/upload-sourcemaps.mjs), which ships the hidden sourcemaps to LaunchDarkly so Observability can de-minify production stack traces — keyed on `VERCEL_GIT_COMMIT_SHA`, which is also baked into the client bundle as `__APP_VERSION__` so errors pair with the right maps. It needs `LD_ACCESS_TOKEN` in the deploy environment and skips itself without one.
-
-To deploy elsewhere, swap in a different [adapter](https://svelte.dev/docs/kit/adapters) for your target.
-
-**Known deploy warnings:** `npm install` prints two deprecation warnings:
-
-```
-npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.hirok.io
-npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.hirok.io
-```
-
-Harmless — the build still succeeds. Both are transitive dependencies of `drizzle-kit` (dev-only, used by the `db:*` scripts), not direct dependencies. They can't be removed until `drizzle-kit` drops the `@esbuild-kit/*` packages upstream.
 
 ## Project provenance
 
