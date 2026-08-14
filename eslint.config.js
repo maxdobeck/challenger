@@ -34,6 +34,12 @@ export default defineConfig(
 	{
 		ignores: [
 			'.svelte-kit/',
+			// Where adapter-vercel writes the built, minified bundle. Only
+			// present after a build with VERCEL=1 (or a `vercel` CLI run), which
+			// is exactly what you do to reproduce a deploy locally — and without
+			// this, that build buries `npm run lint` in thousands of errors
+			// about generated code.
+			'.vercel/',
 			'build/',
 			'drizzle/',
 			'node_modules/',

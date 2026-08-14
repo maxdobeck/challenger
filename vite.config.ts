@@ -2,17 +2,23 @@ import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
+import { resolveAppVersion, resolveEnvironment } from './scripts/app-version.mjs';
 
 export default defineConfig({
 	// Emit sourcemaps without a //# sourceMappingURL comment, so LaunchDarkly
 	// Observability can de-minify production stack traces without serving the
 	// maps to end users. Uploaded to LD from the `vercel-build` script.
 	build: { sourcemap: 'hidden' },
-	// Baked into the client bundle at build time. On Vercel this is the deploy's
-	// git SHA (VERCEL_GIT_COMMIT_SHA), which must match the --app-version used
-	// when uploading sourcemaps so LD can pair errors with the right maps.
+	// Baked into the bundle at build time, and reported to LD Observability at
+	// runtime by both the browser plugin ($lib/stores/launchdarkly) and the
+	// server one ($lib/server/ai/ldClient).
+	//
+	// __APP_VERSION__ must match the --app-version that scripts/
+	// upload-sourcemaps.mjs uploads under, or LD cannot pair an error with its
+	// map — hence both read the same resolver rather than each deriving it.
 	define: {
-		__APP_VERSION__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? 'dev')
+		__APP_VERSION__: JSON.stringify(resolveAppVersion()),
+		__APP_ENVIRONMENT__: JSON.stringify(resolveEnvironment())
 	},
 	plugins: [
 		tailwindcss(),

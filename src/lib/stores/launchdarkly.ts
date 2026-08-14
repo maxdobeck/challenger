@@ -56,10 +56,18 @@ export async function initLD() {
 		plugins: [
 			// `version` is the deploy's git SHA (see vite.config `define`), matching
 			// the sourcemaps uploaded to LD so production stack traces de-minify.
+			//
+			// `environment` is set explicitly because the plugin otherwise
+			// defaults it to 'production' — which files every Playwright run's
+			// errors alongside real user traffic under Production, with no way to
+			// tell them apart in the UI. Those runs are built outside Vercel, so
+			// no sourcemaps are ever uploaded for them and their traces can never
+			// unroll; labelling them 'ci' keeps them one filter away.
 			new Observability({
 				tracingOrigins: true,
 				serviceName: 'challenger',
-				version: __APP_VERSION__
+				version: __APP_VERSION__,
+				environment: __APP_ENVIRONMENT__
 			}),
 			new SessionReplay({ privacySetting: 'default' })
 		]

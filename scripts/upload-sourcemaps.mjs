@@ -16,10 +16,15 @@
 //       - SOURCEMAPS_UPLOAD_OPTIONAL=true  -> downgrade failures to a warning
 //       - SOURCEMAPS_UPLOAD_FORCE=true     -> run the upload outside a deploy
 //         (e.g. a manual/local re-upload for a specific version)
+//       - SOURCEMAPS_UPLOAD_DRY_RUN=true   -> resolve the version, find the
+//         maps and print the exact ldcli invocation, without downloading
+//         anything or uploading. Use it to confirm the version and paths line
+//         up with what the bundle reports, without a real access token.
 import { existsSync, readdirSync, statSync, mkdtempSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { resolveAppVersion } from './app-version.mjs';
 
 const LDCLI_VERSION = '3.10.0';
 const PROJECT = 'challenger';
@@ -29,23 +34,20 @@ const token = process.env.LD_ACCESS_TOKEN;
 const vercelEnv = process.env.VERCEL_ENV;
 const force = process.env.SOURCEMAPS_UPLOAD_FORCE === 'true';
 const optional = process.env.SOURCEMAPS_UPLOAD_OPTIONAL === 'true';
+const dryRun = process.env.SOURCEMAPS_UPLOAD_DRY_RUN === 'true';
 
-function capture(cmd, args) {
-	const r = spawnSync(cmd, args, { encoding: 'utf8' });
-	return r.status === 0 ? r.stdout.trim() : '';
-}
-
-// Deploy version, in priority order: Vercel, GitHub Actions, then local HEAD.
-// MUST equal the `version` baked into the client bundle (see vite.config.ts) so
-// LaunchDarkly can pair ingested errors with these maps.
-const version =
-	process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || capture('git', ['rev-parse', 'HEAD']);
+// MUST equal the `version` baked into the bundle. Shared with vite.config.ts
+// rather than re-derived here, because the two silently drifting apart is the
+// one failure this whole script cannot detect: the upload succeeds, and the
+// maps are simply filed under a key no error will ever look up.
+const version = resolveAppVersion();
 
 // A real deploy that must not ship without maps.
 const isVercelDeploy = vercelEnv === 'production' || vercelEnv === 'preview';
 // Whether we attempt the upload at all, and whether a failure is fatal.
-const active = isVercelDeploy || force;
-const fatal = active && !optional;
+const active = isVercelDeploy || force || dryRun;
+// A dry run reports rather than ships, so nothing it finds should fail a build.
+const fatal = active && !optional && !dryRun;
 
 function skip(reason) {
 	console.log(`[sourcemaps] Skipping upload: ${reason}.`);
@@ -84,10 +86,16 @@ function withRetry(label, attempt) {
 
 // --- guards -------------------------------------------------------------
 // A non-prod/preview Vercel env (e.g. 'development') never deploys assets.
-if (vercelEnv && !isVercelDeploy && !force) skip(`VERCEL_ENV=${vercelEnv}, not production/preview`);
+if (vercelEnv && !isVercelDeploy && !force && !dryRun) {
+	skip(`VERCEL_ENV=${vercelEnv}, not production/preview`);
+}
 if (!active) skip('not a production/preview deploy (set SOURCEMAPS_UPLOAD_FORCE=true to run manually)');
-if (!version) stop('could not determine an app version (no VERCEL_GIT_COMMIT_SHA / GITHUB_SHA / git HEAD)');
-if (!token) stop('LD_ACCESS_TOKEN not set — add it to this environment scope');
+// 'dev' is resolveAppVersion()'s last-resort fallback, reached only when there
+// is no Vercel/GitHub sha and no git repo. Every build that ever reaches it
+// shares the one key, so it is not a usable version to file maps under.
+if (version === 'dev') stop('could not determine an app version (no VERCEL_GIT_COMMIT_SHA / GITHUB_SHA / git HEAD)');
+// A dry run never contacts LaunchDarkly, so it needs no credentials.
+if (!token && !dryRun) stop('LD_ACCESS_TOKEN not set — add it to this environment scope');
 
 // --- locate maps --------------------------------------------------------
 function countMaps(dir) {
@@ -118,6 +126,19 @@ function countMaps(dir) {
 const candidates = ['.vercel/output/static', '.svelte-kit/output/client'];
 const mapsPath = candidates.find((c) => existsSync(c) && countMaps(c) > 0);
 if (!mapsPath) stop(`no .map files found in ${candidates.join(' or ')}`);
+
+// --- dry run ------------------------------------------------------------
+// Everything above is the part that can silently be wrong (which version, which
+// directory); everything below is just network. Report and stop, so the
+// interesting half can be checked without a token or a deploy.
+if (dryRun) {
+	console.log(`[sourcemaps] Dry run — nothing will be downloaded or uploaded.`);
+	console.log(`[sourcemaps]   app-version: ${version}`);
+	console.log(`[sourcemaps]   path:        ${mapsPath} (${countMaps(mapsPath)} map(s))`);
+	console.log(`[sourcemaps]   project:     ${PROJECT}`);
+	console.log(`[sourcemaps]   token:       ${token ? 'set' : 'NOT set (required for a real upload)'}`);
+	process.exit(0);
+}
 
 // --- fetch the pinned ldcli binary --------------------------------------
 function ldcliAsset() {
