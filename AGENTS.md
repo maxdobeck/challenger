@@ -29,3 +29,35 @@ You MUST use this tool whenever writing Svelte code before sending it to the use
 
 Generates a Svelte Playground link with the provided code.
 After completing the code, ask the user if they want a playground link. Only call this tool after user confirmation and NEVER if code was written to files in their project.
+
+---
+
+## Running tests
+
+**End-to-end: run `npm run test:e2e`, and nothing else.**
+
+Do not invoke `npx playwright test` directly, do not pass your own `--config`,
+and do not override `--grep` / `--grep-invert`. The npm script is the only
+supported entry point, because it carries `--grep-invert "@traffic|@ai"` — and
+both of those tags cost real money or pollute real data:
+
+- `@ai` (`e2e/ai/*`) makes live Anthropic API calls. Every run bills the
+  account.
+- `@traffic` (`e2e/traffic/*`) drives bulk traffic — `matchmake-random-users`
+  alone creates 25 accounts and fires real flag evaluations and experiment
+  exposures at the **production** LaunchDarkly environment. That is analytics
+  data you cannot take back out.
+
+Bypassing the config also loses `playwright.config.ts`'s `testIgnore` for
+nested worktrees under `.claude/worktrees/`, which otherwise sweeps a feature
+branch's specs into this checkout's run.
+
+Run `npm run test:e2e:ai` or `npm run test:e2e:traffic` **only when the user
+explicitly asks for that specific suite.** Never as part of a general "run the
+tests".
+
+**Unit tests: `npm run test:unit` is unrestricted.** It is vitest over pure
+logic — no browser, no database, no network, no spend. Run it freely.
+
+`npm run test` (unit + e2e) and `npm run check` / `npm run lint` are also
+always safe.
