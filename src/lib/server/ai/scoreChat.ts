@@ -332,11 +332,18 @@ export async function runScoreChatTurn(
 	// is what `instructions` models, not a per-call prompt template.
 	const context = buildServerContext(user, profile);
 	const aiClient = await getAiClient();
+	// The trailing 'vercel' names the provider package up front. Without it the
+	// SDK walks its built-in list -- langchain before vercel -- and logs a
+	// failed package load for langchain on every single turn before falling
+	// through to the one we actually installed. Naming it skips the walk.
 	const aiConfig = aiClient
-		? await aiClient.agentConfig(SCORE_CHAT_CONFIG_KEY, context, {
-				model: { name: DEFAULT_MODEL },
-				instructions: DEFAULT_PROMPT
-			})
+		? await aiClient.agentConfig(
+				SCORE_CHAT_CONFIG_KEY,
+				context,
+				{ model: { name: DEFAULT_MODEL }, instructions: DEFAULT_PROMPT },
+				undefined,
+				'vercel'
+			)
 		: null;
 	const tracker = aiConfig?.createTracker();
 	const newUserMessage: ModelMessage = { role: 'user', content: newUserContent };
