@@ -2,6 +2,14 @@
 
 A Kill Team tournament tracker — login, the full team list, player-vs-player match logging with Kill Team's VP scoring (crit/tac/kill/primary), per-team stats, tournaments, and a leaderboard. 
 
+## LD Features of note
+- Flags by segment
+- Flags by hardcoded user context
+- AI judges and observation(AI Config)
+- Telemetry: sourcemap uploads for when errors happen
+- An experiment to see if a call-to-action is working
+- Telemetry: some metrics, frustration click
+
 ## Ways to run Challenger
 
 In increasing order of effort:
@@ -9,7 +17,7 @@ In increasing order of effort:
 | # | Way | What you run | Data | Setup |
 | --- | --- | --- | --- | --- |
 | 1 | [Publicly Available Demo Site](#1-hosted-demo) | <https://challenger-phi.vercel.app/> | In-memory (per serverless instance) | None |
-| 2 | [Demo mode, locally](#2-demo-mode-locally) | `npm run dev:demo` | In-memory (per server process) | `npm install` |
+| 2 | [Demo mode, locally](#2-demo-mode-locally) | `npm run dev:demo` | In-memory (per server process) | `npm install` (+ `npm run setup:demo` for real AI) |
 | 3 | [Full local stack](#3-full-local-stack) | `npm run launch` | Postgres via Docker, build, database seed, etc | `.env` + Docker |
 
 Every mode runs the same UI. What changes is where the data lives and how auth works. 
@@ -25,7 +33,24 @@ It's a demo-mode build: [`vercel.json`](vercel.json) sets `DEMO_MODE=true` at bu
 Some things behave differently from a local run with a database:
 
 - Everything is temporary. Data is ephemeral and often stored in memory or in cookies. When you logout or close the tab the data is gone. Purely a demo website. 
-- Client-side LaunchDarkly is live either way: `PUBLIC_LD_CLIENT_ID` points at the `challenger` production LD environment, so the hosted demo emits real flag evaluations, experiment exposures, and session replays.
+- `PUBLIC_LD_CLIENT_ID` points at the `challenger` production LD environment, so the hosted demo emits real flag evaluations, experiment exposures, and session replays.
+- The AI features are real too: the Vercel project supplies `LAUNCHDARKLY_SDK_KEY` and `ANTHROPIC_API_KEY` on top of `vercel.json`, so score scanning calls Anthropic for real and the AI Configs resolve, track, and get judged. A local demo run needs those two keys to match — see [Demo mode and `.env.demo`](#demo-mode-and-envdemo).
+
+### Deploying your own copy
+
+Import the repo as a Vercel project and it deploys as-is — [`vercel.json`](vercel.json) carries the first three variables below at both build and runtime, so nothing is required to get a working, mocked-AI demo. The two secrets can't be committed, so they go in **Project Settings → Environment Variables** — that's where this deploy keeps them.
+
+| Variable | Where it comes from | Without it |
+| --- | --- | --- |
+| `DEMO_MODE=true` | `vercel.json` | The build boots into database mode and fails with no `DATABASE_URL` |
+| `BETTER_AUTH_SECRET` | `vercel.json` (placeholder — demo mode never verifies a session against a database) | Sessions can't be signed |
+| `PUBLIC_LD_CLIENT_ID` | `vercel.json` | Falls back to the committed production client-side ID, so browser flags still evaluate |
+| `ANTHROPIC_API_KEY` | Project Settings | Photo scoring, text parsing, and score chat return placeholder scores instead of reading the card |
+| `LAUNCHDARKLY_SDK_KEY` | Project Settings | The server SDK never initializes — no AI Config resolution, generation metrics, judges, or traces |
+| `LD_ACCESS_TOKEN` | Project Settings, optional | [`upload-sourcemaps.mjs`](scripts/upload-sourcemaps.mjs) can't upload at deploy time, so production stack traces in LD stay minified |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Vercel KV integration, optional and unset today | Demo writes stay in per-instance memory instead of persisting across serverless instances |
+
+Point it at your own LaunchDarkly project by overriding `PUBLIC_LD_CLIENT_ID` and `LAUNCHDARKLY_SDK_KEY` — [docs/launchdarkly-setup.md](docs/launchdarkly-setup.md) is the recipe for building the flags, segments, experiment, and AI Configs it expects.
 
 ## 2. Demo mode, locally
 
@@ -34,7 +59,34 @@ npm install
 npm run dev:demo
 ```
 
-No Docker, no Postgres, no `.env` file. `vite dev --mode demo` loads [`.env.demo`](.env.demo) (`DEMO_MODE=true`) and the app runs against an in-memory dataset built by [`src/lib/server/demo/data.ts`](src/lib/server/demo/data.ts) — the same team list, players, tournaments and match-generation logic as the real seed script(database mode), from a fixed seed so every start produces an identical dataset.
+That's the whole setup — no Docker, no Postgres, no env file to write. The AI features are the one thing that needs keys; to turn them on:
+
+```sh
+npm run setup:demo    # copies .env.demo.local.example → .env.demo.local
+# fill in the two keys below, then:
+npm run dev:demo
+```
+
+`setup:demo` won't touch an existing `.env.demo.local`, so it's safe to re-run.
+
+### What goes in `.env.demo.local`
+
+Everything the hosted demo runs with. The first four are already set for you in the committed [`.env.demo`](.env.demo) — the template repeats them only so you can see the full picture and override one if you need to. **Both secrets are optional**; the app boots and the UI works without them.
+
+| Variable | Needed for | Without it |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Photo scoring, text parsing, score chat | The AI features don't work: scans return randomized placeholder scores, and the chat replies "no Anthropic API key is configured" instead of filling in the form |
+| `LAUNCHDARKLY_SDK_KEY` | Server-side AI Config resolution, generation metrics, judges, traces | The server SDK never initializes, every tracker call no-ops, and the AI Config's Monitoring tab stays empty |
+| `DEMO_MODE=true` | The in-memory dataset and demo login | Already in `.env.demo`. Unset, the app boots into database mode and needs a real `DATABASE_URL` |
+| `ORIGIN` | better-auth's `baseURL` | Already in `.env.demo`. Unused in demo mode, which never loads better-auth |
+| `BETTER_AUTH_SECRET` | Signing real sessions | Already in `.env.demo`, as the same placeholder `vercel.json` uses — demo mode never verifies a session against a database |
+| `PUBLIC_LD_CLIENT_ID` | Pointing at a different LD environment | Falls back to the committed production client-side ID, so browser flags, the experiment, and session replay already work |
+
+One trap worth knowing: the template ships those two keys as `""`, and `.env.demo.local` loads *last*. If you have a `.env` from [mode 3](#3-full-local-stack) with real keys in it, copying the template and leaving the blanks empty **overrides** them and turns the AI features off. Either fill them in or delete the two lines.
+
+`vite dev --mode demo` loads the committed [`.env.demo`](.env.demo) (`DEMO_MODE=true`) and the app runs against an in-memory dataset built by [`src/lib/server/demo/data.ts`](src/lib/server/demo/data.ts) — the same team list, players, tournaments and match-generation logic as the real seed script (database mode), from a fixed seed so every start produces an identical dataset. Client-side LaunchDarkly is live even on a bare checkout: flags, the experiment, and session replay all evaluate against the `challenger` production environment.
+
+For how Vite layers the env files, and why the keys go in `.env.demo.local` rather than `.env.demo`, see [Demo mode and `.env.demo`](#demo-mode-and-envdemo).
 
 Open <http://localhost:5173> and log in on `/login`:
 
@@ -120,13 +172,56 @@ Every one of these is optional except where a mode requires it — the app degra
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Persisting demo-mode writes across serverless instances | Demo writes stay in per-process memory |
 | `LD_ACCESS_TOKEN` | Uploading sourcemaps at deploy time | Production stack traces in LD stay minified |
 
-## LD Features of note
-- Flags by segment
-- Flags by hardcoded user context
-- AI judges and observation(AI Config)
-- Telemetry: sourcemap uploads for when errors happen
-- An experiment to see if a call-to-action is working
-- Telemetry: some metrics, frustration clicks
+### Demo mode and `.env.demo`
+
+`npm run dev:demo` is `vite dev --mode demo`, and Vite loads **every** matching file, later ones winning on conflicts:
+
+```
+.env  →  .env.local  →  .env.demo  →  .env.demo.local
+```
+
+[`.env.demo`](.env.demo) is committed, and holds only things that are safe to commit:
+
+```sh
+DEMO_MODE=true
+ORIGIN=http://localhost:5173
+BETTER_AUTH_SECRET=demo-mode-not-a-real-secret
+```
+
+That's the whole file — it's why a fresh checkout boots with `npm install && npm run dev:demo` and nothing else. It's also why a fresh checkout is *not* at parity with the hosted demo, which gets `DEMO_MODE`, `BETTER_AUTH_SECRET` and `PUBLIC_LD_CLIENT_ID` from [`vercel.json`](vercel.json) **plus `LAUNCHDARKLY_SDK_KEY` and `ANTHROPIC_API_KEY` from the Vercel project's environment variables** — the two secrets that can't live in a public repo.
+
+| | Bare checkout, `npm run dev:demo` | Hosted demo |
+| --- | --- | --- |
+| Data | In-memory, per process | In-memory, per serverless instance |
+| Client-side flags, experiment, session replay | Real (committed fallback client ID) | Real |
+| Server-side AI Config resolution, generation metrics, judges, traces | **None** — no `LAUNCHDARKLY_SDK_KEY`, so the server SDK never initializes | Real |
+| Score scan / text parse / score chat | **Mocked** — randomized placeholder scores, and the chat replies "no Anthropic API key is configured" | Real Anthropic calls |
+
+To close that gap, run `npm run setup:demo` (or `cp .env.demo.local.example .env.demo.local` by hand) and fill in the two secrets — see [What goes in `.env.demo.local`](#what-goes-in-envdemolocal) for the per-variable table:
+
+```sh
+LAUNCHDARKLY_SDK_KEY="sdk-..."
+ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+`.env.demo.local` is gitignored and loads last, so it wins over both `.env` and `.env.demo` and applies only to demo mode. Restart `npm run dev:demo` and local demo mode behaves exactly like the hosted site: real AI Config resolution, real model calls, real judges and traces in the Monitoring tab — still with no database and no real auth.
+
+### The env files, and which are committed
+
+| File | Committed? | Role |
+| --- | --- | --- |
+| [`.env.example`](.env.example) | yes | Template for [mode 3](#3-full-local-stack) — copy to `.env` and fill in |
+| [`.env.demo`](.env.demo) | yes | What makes mode 2 and CI work with no setup; holds no secrets |
+| [`.env.demo.local.example`](.env.demo.local.example) | yes | Template for mode 2 — copy to `.env.demo.local`; placeholders only |
+| `.env` | no | Your mode 3 config, with a real `DATABASE_URL` |
+| `.env.demo.local` | no | The two secrets above, for hosted-demo parity in mode 2 |
+
+`.env.demo` can't be folded into `.env`: `.env` is gitignored, so a fresh clone and CI both have none of it, and [`playwright.config.ts`](playwright.config.ts) keys the whole no-database test run off `existsSync('.env.demo')`. Keeping them separate is also what lets both modes coexist on one machine — `.env` carries `DATABASE_URL` for mode 3, `.env.demo` carries `DEMO_MODE=true` for mode 2, and because the mode file loads last, `npm run dev:demo` gets demo mode without you editing anything.
+
+Two more things worth knowing:
+
+- **Copy the template to `.env.demo.local`, never to `.env.demo`.** `.env.demo` is force-tracked in [`.gitignore`](.gitignore) (`!.env.demo`) because CI needs it to exist on a bare checkout, so a key written there is one `git add` away from being public. That's why the template is named for its destination.
+- **If you already have a `.env` for [mode 3](#3-full-local-stack), demo mode inherits it.** `DEMO_MODE=true` from `.env.demo` still wins, so you get the in-memory dataset and `DATABASE_URL` is simply unused — but your `LAUNCHDARKLY_SDK_KEY` and `ANTHROPIC_API_KEY` carry over, which means AI calls are already real (and billed) in demo mode on that machine. If you're demoing the mocked path on purpose, that's the thing to check first.
 
 ## AI features
 
@@ -142,8 +237,7 @@ Each call runs inside an OpenTelemetry span carrying `launchdarkly.ai.config.key
 
 ## LaunchDarkly configuration
 
-Everything the app evaluates lives in the `challenger` project, environments `production`
-and `test`. [`docs/launchdarkly-setup.md`](docs/launchdarkly-setup.md) is the from-scratch
+Everything the app evaluates lives in the `challenger` project, environments `production`. [docs/launchdarkly-setup.md](docs/launchdarkly-setup.md) is the from-scratch
 recipe for recreating it — targeting rules, prompts, and models, all read back out of the
 live project — and it opens with a compact spec block an agent with the LaunchDarkly MCP
 server can build from directly.
@@ -153,9 +247,9 @@ server can build from directly.
 | Flags | `tourneys-in-area`, `social-matchmake`, `debug-mode` |
 | Segments | `non-tournament-players`, `debug` |
 | Experiments | `social-matchmake-cta` |
-| Metrics | `matchmake-click-rate` (plus autogenerated `ld_autogen__*` telemetry metrics) |
-| AI Configs | `score-chat` (agent), `score-photo-scan`, `score-text-parse` (completion) |
-| Judges | `score-read-judge` (custom); `accuracy`, `relevance`, `toxicity` (stock) |
+| Metrics | `matchmake-click-rate`|
+| AI Configs(Variations) | `score-chat` (agent), `score-photo-scan`, `score-text-parse` (completion) |
+| Judges | `score-read-judge` (custom); `accuracy`, `relevance`, `toxicity` (default LaunchDarkly) |
 
 ## Tests
 
@@ -178,6 +272,7 @@ The e2e suite runs in whichever mode is configured, and [`playwright.config.ts`]
 | `npm run launch` | Database, migrations, seed, and dev server — all in one go |
 | `npm run dev` | Just the dev server (`-- --open` to open a browser tab) |
 | `npm run dev:demo` | Dev server in [demo mode](#2-demo-mode-locally) — no database |
+| `npm run setup:demo` | Create `.env.demo.local` from the template, for AI keys in demo mode. Leaves an existing one alone |
 | `npm run build` / `preview` | Production build; preview it on port 4173 |
 | `npm run db:up` | Start Postgres in the background (`docker compose up -d`) |
 | `npm run db:start` | Start Postgres in the foreground, logs attached |
