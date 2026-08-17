@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"dev:demo": "vite dev --mode demo",
+		"setup:demo": "node -e \"const fs=require('fs'); if (fs.existsSync('.env.demo.local')) { console.log('.env.demo.local already exists — leaving it as is'); } else { fs.copyFileSync('.env.demo.local.example', '.env.demo.local'); console.log('Created .env.demo.local — fill in ANTHROPIC_API_KEY and LAUNCHDARKLY_SDK_KEY to enable the AI features'); }\"",
 		"build": "vite build",
 		"vercel-build": "vite build && node scripts/upload-sourcemaps.mjs",
 		"preview": "vite preview",
