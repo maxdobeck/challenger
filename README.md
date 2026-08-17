@@ -39,7 +39,7 @@ Some things behave differently from a local run with a database:
 ## 2. Demo mode, locally
 
 ```sh
-cp .env.example .env    
+cp .env.example .env
 #then fill in .env
 npm install
 npm run dev:demo
