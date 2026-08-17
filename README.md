@@ -20,13 +20,13 @@ In increasing order of effort:
 | 2 | [Demo mode, locally](#2-demo-mode-locally) | `npm run dev:demo` | In-memory (per server process) | `npm install` (+ `npm run setup:demo` for real AI) |
 | 3 | [Full local stack](#3-full-local-stack) | `npm run launch` | Postgres via Docker, build, database seed, etc | `.env` + Docker |
 
-Every mode runs the same UI. What changes is where the data lives and how auth works. 
+Every mode runs the same UI. What changes is where the data lives and how auth works. And the Hosted instance only works with Max's challenger Launch Darkly project.
 
 ---
 
 ## 1. Hosted demo
 
-Follow this link to the Demo Site: **<https://challenger-phi.vercel.app/>**
+Follow this link to the Demo Site: **<https://challenger-phi.vercel.app/>**. You can't change the Launch Darkly flags but Max can during a demo
 
 It's a demo-mode build: [`vercel.json`](vercel.json) sets `DEMO_MODE=true` at build and runtime, so there's no database and no `DATABASE_URL`. Log in from the account dropdown on `/login` — the curated roster in [`demo-fixtures.ts`](src/lib/server/db/demo-fixtures.ts) (Max, test1, testTourney, then 12 tournament players and the casual-only cohort).
 
@@ -34,44 +34,23 @@ Some things behave differently from a local run with a database:
 
 - Everything is temporary. Data is ephemeral and often stored in memory or in cookies. When you logout or close the tab the data is gone. Purely a demo website. 
 - `PUBLIC_LD_CLIENT_ID` points at the `challenger` production LD environment, so the hosted demo emits real flag evaluations, experiment exposures, and session replays.
-- The AI features are real too: the Vercel project supplies `LAUNCHDARKLY_SDK_KEY` and `ANTHROPIC_API_KEY` on top of `vercel.json`, so score scanning calls Anthropic for real and the AI Configs resolve, track, and get judged. A local demo run needs those two keys to match — see [Demo mode and `.env.demo`](#demo-mode-and-envdemo).
-
-### Deploying your own copy
-
-Import the repo as a Vercel project and it deploys as-is — [`vercel.json`](vercel.json) carries the first three variables below at both build and runtime, so nothing is required to get a working, mocked-AI demo. The two secrets can't be committed, so they go in **Project Settings → Environment Variables** — that's where this deploy keeps them.
-
-| Variable | Where it comes from | Without it |
-| --- | --- | --- |
-| `DEMO_MODE=true` | `vercel.json` | The build boots into database mode and fails with no `DATABASE_URL` |
-| `BETTER_AUTH_SECRET` | `vercel.json` (placeholder — demo mode never verifies a session against a database) | Sessions can't be signed |
-| `PUBLIC_LD_CLIENT_ID` | `vercel.json` | Falls back to the committed production client-side ID, so browser flags still evaluate |
-| `ANTHROPIC_API_KEY` | Project Settings | Photo scoring, text parsing, and score chat return placeholder scores instead of reading the card |
-| `LAUNCHDARKLY_SDK_KEY` | Project Settings | The server SDK never initializes — no AI Config resolution, generation metrics, judges, or traces |
-| `LD_ACCESS_TOKEN` | Project Settings, optional | [`upload-sourcemaps.mjs`](scripts/upload-sourcemaps.mjs) can't upload at deploy time, so production stack traces in LD stay minified |
-| `KV_REST_API_URL` / `KV_REST_API_TOKEN` | Vercel KV integration, optional and unset today | Demo writes stay in per-instance memory instead of persisting across serverless instances |
-
-Point it at your own LaunchDarkly project by overriding `PUBLIC_LD_CLIENT_ID` and `LAUNCHDARKLY_SDK_KEY` — [docs/launchdarkly-setup.md](docs/launchdarkly-setup.md) is the recipe for building the flags, segments, experiment, and AI Configs it expects.
+- The AI features are real too: the Vercel project supplies `LAUNCHDARKLY_SDK_KEY` and `ANTHROPIC_API_KEY` on top of `vercel.json`, so score scanning calls Anthropic for real and the AI Configs resolve, track, and get judged.
 
 ## 2. Demo mode, locally
 
 ```sh
+# copies .env.demo.local.example to env.demo.local
+npm run setup:demo    
+# Fill in the .env.demo.local values
 npm install
 npm run dev:demo
 ```
 
-That's the whole setup — no Docker, no Postgres, no env file to write. The AI features are the one thing that needs keys; to turn them on:
-
-```sh
-npm run setup:demo    # copies .env.demo.local.example → .env.demo.local
-# fill in the two keys below, then:
-npm run dev:demo
-```
-
-`setup:demo` won't touch an existing `.env.demo.local`, so it's safe to re-run.
+That's the whole setup — no Docker, no Postgres, no env file to write. The AI features are the one thing that needs keys to turn them on:
 
 ### What goes in `.env.demo.local`
 
-Everything the hosted demo runs with. The first four are already set for you in the committed [`.env.demo`](.env.demo) — the template repeats them only so you can see the full picture and override one if you need to. **Both secrets are optional**; the app boots and the UI works without them.
+Everything you can see in the hosted demo on vercel, but with a little legwork from you! The first four are already set for you in the committed [`.env.demo`](.env.demo) — the template repeats them only so you can see the full picture and override one if you need to. **Both secrets are optional**; the app boots and the UI works without them.
 
 | Variable | Needed for | Without it |
 | --- | --- | --- |
