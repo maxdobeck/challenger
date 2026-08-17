@@ -39,17 +39,14 @@ Some things behave differently from a local run with a database:
 ## 2. Demo mode, locally
 
 ```sh
+cp .env.example .env    
+#then fill in .env
 npm install
 npm run dev:demo
 ```
 
 That's the whole setup — no Docker, no Postgres, no env file to write. The AI features are the only thing that needs keys:
 
-```sh
-cp .env.example .env    # skip if you already have one
-```
-
-then fill in these two and restart `npm run dev:demo`:
 
 | Variable | Needed for | Without it |
 | --- | --- | --- |
