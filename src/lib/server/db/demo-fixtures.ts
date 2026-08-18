@@ -18,6 +18,17 @@ export const TEST_USER = { name: 'test1', email: 'test1@challenger.example.com' 
 // casual-only accounts above). Used by the banner e2e tests.
 export const TOURNEY_USER = { name: 'testTourney', email: 'testTourney@challenger.example.com' };
 
+// The heavy-tournament persona: like TOURNEY_USER it never plays a casual game,
+// but its history is an exact, predictable HEAVY_TOURNEY_MATCH_COUNT matches,
+// every one of them attached to a different tournament. TOURNEY_USER's count is
+// left to chance by the random attendee draw, so it can't be demoed against;
+// this account exists to show a full By-Tournament breakdown with a known
+// number of rows in both real-auth and demo mode.
+export const HEAVY_TOURNEY_USER = {
+	name: 'heavytourneyuser',
+	email: 'heavytourneyuser@challenger.example.com'
+};
+
 // Derives a seeded player's email from their display name. Shared with the seed
 // script so the login dropdown's addresses can never drift from what's seeded.
 export function killteamEmail(name: string): string {
@@ -115,31 +126,58 @@ export const CASUAL_PLAYERS = [
 // login page's demo-account action can sign these accounts in.
 export const DEMO_LOGIN_PASSWORD = 'password123';
 
+// How many of FAKE_PLAYERS / CASUAL_PLAYERS the dropdown offers. The list is
+// deliberately short (10 entries total) so it stays scannable — signing in as
+// any of the other seeded accounts is still possible through the plain
+// email/password form, which accepts every one of them in both modes.
+export const DEMO_LOGIN_FAKE_PLAYER_COUNT = 2;
+export const DEMO_LOGIN_CASUAL_PLAYER_COUNT = 4;
+
 // Curated subset of seeded accounts offered in the login page's "demo account"
 // dropdown, and (in demo mode) the actual roster of accounts you can log in
-// as — Max/test1/testTourney fixed at the front, then the leading
-// FAKE_PLAYERS, then every CASUAL_PLAYER. All are guaranteed to exist after
-// `npm run db:seed` in real-auth mode (every one created with
-// DEMO_LOGIN_PASSWORD) and are always present in demo mode's in-memory dataset
-// (see $lib/server/demo/data.ts).
+// as. All are guaranteed to exist after `npm run db:seed` in real-auth mode
+// (every one created with DEMO_LOGIN_PASSWORD) and are always present in demo
+// mode's in-memory dataset (see $lib/server/demo/data.ts).
 //
-// The CASUAL_PLAYERS are all included on purpose: they're the only accounts
-// eligible for the `social-matchmake-cta` experiment (everyone else has played
-// a tournament and is filtered out by the `non-tournament-players` segment), so
-// without them the dropdown offers no way to reach an account that can show the
-// "Matchmake Now!" button — Max and test1 aside.
+// Order is the order they appear in the dropdown, and the first entry is what
+// the "Login as …" button defaults to:
+//   1. Max and test1        — the casual-only personas (no tournaments)
+//   2. heavytourneyuser     — exactly HEAVY_TOURNEY_MATCH_COUNT tournament
+//                             matches and nothing else
+//   3. testTourney          — tournament-only, count left to chance
+//   4. the leading FAKE_PLAYERS   — mixed casual + tournament history
+//   5. the leading CASUAL_PLAYERS — never any tournament
+//
+// A few CASUAL_PLAYERS have to stay on this list: they and Max/test1 are the
+// only accounts eligible for the `social-matchmake-cta` experiment (everyone
+// else has played a tournament and is filtered out by the
+// `non-tournament-players` segment), so dropping them entirely would leave no
+// one-click way to reach an account that can show the "Matchmake Now!" button.
 export const DEMO_LOGIN_ACCOUNTS: ReadonlyArray<{ name: string; email: string }> = [
 	{ name: STATIC_USER.name, email: STATIC_USER.email },
 	{ name: TEST_USER.name, email: TEST_USER.email },
+	{ name: HEAVY_TOURNEY_USER.name, email: HEAVY_TOURNEY_USER.email },
 	{ name: TOURNEY_USER.name, email: TOURNEY_USER.email },
-	...FAKE_PLAYERS.slice(0, 12).map((name) => ({ name, email: killteamEmail(name) })),
-	...CASUAL_PLAYERS.map((name) => ({ name, email: killteamEmail(name) }))
+	...FAKE_PLAYERS.slice(0, DEMO_LOGIN_FAKE_PLAYER_COUNT).map((name) => ({
+		name,
+		email: killteamEmail(name)
+	})),
+	...CASUAL_PLAYERS.slice(0, DEMO_LOGIN_CASUAL_PLAYER_COUNT).map((name) => ({
+		name,
+		email: killteamEmail(name)
+	}))
 ];
 
 // Match-count targets: Max always gets exactly this many, everyone else gets
 // a random count in the range below (as their own logged, player1 matches).
 export const STATIC_USER_MATCH_COUNT = 23;
 export const RANDOM_MATCH_COUNT_RANGE: [number, number] = [12, 53];
+
+// HEAVY_TOURNEY_USER's exact match count. Every one is a tournament match at a
+// distinct tournament, so their By-Tournament stats show this many events and
+// their casual history is empty. Must stay <= DEMO_TOURNAMENT_COUNT below, or
+// demo mode runs out of tournaments to attend.
+export const HEAVY_TOURNEY_MATCH_COUNT = 30;
 
 // Building blocks for the in-memory demo tournaments (src/lib/server/demo/data.ts).
 // The real seed (seed.ts) uses faker for true randomness; the demo wants a fixed,

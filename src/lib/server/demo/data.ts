@@ -2,12 +2,14 @@ import {
 	STATIC_USER,
 	TEST_USER,
 	TOURNEY_USER,
+	HEAVY_TOURNEY_USER,
 	teamNames,
 	FAKE_PLAYERS,
 	CASUAL_PLAYERS,
 	killteamEmail,
 	STATIC_USER_MATCH_COUNT,
 	RANDOM_MATCH_COUNT_RANGE,
+	HEAVY_TOURNEY_MATCH_COUNT,
 	DEMO_TOURNAMENT_COUNT,
 	TOURNAMENT_SUFFIXES,
 	VENUE_TYPES,
@@ -74,16 +76,19 @@ const rng = mulberry32(20260806);
 const MAX_ID = 'demo-max';
 const TEST1_ID = 'demo-test1';
 const TOURNEY_ID = 'demo-tourney';
+const HEAVY_TOURNEY_ID = 'demo-heavy-tourney';
 
 export const DEMO_MODE: boolean = true;
 export const demoTeams: DemoTeam[] = teamNames.map((name, index) => ({ id: index + 1, name }));
 
-// Mirrors DEMO_LOGIN_ACCOUNTS' fixed accounts (Max, test1, testTourney) so the
-// same curated login accounts resolve to real identities — with generated
-// match/tournament history — in demo mode, not just in the seeded DB.
+// Mirrors DEMO_LOGIN_ACCOUNTS' fixed accounts (Max, test1, heavytourneyuser,
+// testTourney) so the same curated login accounts resolve to real identities —
+// with generated match/tournament history — in demo mode, not just in the
+// seeded DB.
 export const demoUsers: DemoUser[] = [
 	{ id: MAX_ID, name: STATIC_USER.name, email: STATIC_USER.email },
 	{ id: TEST1_ID, name: TEST_USER.name, email: TEST_USER.email },
+	{ id: HEAVY_TOURNEY_ID, name: HEAVY_TOURNEY_USER.name, email: HEAVY_TOURNEY_USER.email },
 	{ id: TOURNEY_ID, name: TOURNEY_USER.name, email: TOURNEY_USER.email },
 	...FAKE_PLAYERS.map((name, index) => ({
 		id: `demo-player-${index + 1}`,
@@ -211,13 +216,25 @@ for (let i = 1; i <= DEMO_TOURNAMENT_COUNT; i++) {
 // empty and the "Matchmake Now!" button shows for him. The CASUAL_PLAYERS cohort
 // is excluded for the same reason, giving the `non-tournament-players` LD
 // segment a real population rather than just Max and test1.
-const nonMaxUsers = demoUsers.filter((u) => u.id !== MAX_ID && !casualOnlyIds.has(u.id));
+//
+// heavytourneyuser is held out of the random draw as well, but so it can be
+// placed by hand below: it attends exactly the first HEAVY_TOURNEY_MATCH_COUNT
+// tournaments, which is what makes its match count exact. Mirrors seedAttendees
+// in seed.ts.
+const nonMaxUsers = demoUsers.filter(
+	(u) => u.id !== MAX_ID && u.id !== HEAVY_TOURNEY_ID && !casualOnlyIds.has(u.id)
+);
 export const demoAttendees: DemoAttendee[] = [];
 for (const t of demoTournaments) {
 	const target = randomInt(2, 12, rng);
 	const chosen = new Set<string>();
 	while (chosen.size < target) {
 		chosen.add(randomItem(nonMaxUsers, rng).id);
+	}
+	// Tournament ids run 1..DEMO_TOURNAMENT_COUNT, so this registers
+	// heavytourneyuser for exactly HEAVY_TOURNEY_MATCH_COUNT events.
+	if (t.id <= HEAVY_TOURNEY_MATCH_COUNT) {
+		chosen.add(HEAVY_TOURNEY_ID);
 	}
 	for (const userId of chosen) {
 		demoAttendees.push({ tournamentId: t.id, userId, registeredAt: randomPastDate(120, rng) });
@@ -267,7 +284,15 @@ function pushDemoMatch(player1Id: string, player2Id: string, tournamentId: numbe
 // Tournament matches: each event plays ceil(attendees / 2) matches, pairing its
 // attendees so everyone plays at least once (an odd attendee out gets a rematch).
 for (const t of demoTournaments) {
-	const attendees = [...(attendeesByTournament.get(t.id) ?? [])];
+	const registered = attendeesByTournament.get(t.id) ?? [];
+	// heavytourneyuser is paired by hand, exactly once per event it attends,
+	// rather than joining the random pairing below where it could pick up a
+	// second match at the same event (or none at all).
+	const attendees = registered.filter((id) => id !== HEAVY_TOURNEY_ID);
+	if (attendees.length < registered.length && attendees.length > 0) {
+		pushDemoMatch(HEAVY_TOURNEY_ID, randomItem(attendees, rng), t.id);
+	}
+
 	if (attendees.length < 2) continue;
 
 	for (let i = attendees.length - 1; i > 0; i--) {
@@ -289,17 +314,23 @@ for (const t of demoTournaments) {
 	}
 }
 
-// Casual match history per user (never tied to a tournament).
+// Casual match history per user (never tied to a tournament). heavytourneyuser
+// sits this out entirely — neither as the logging player nor as anyone's
+// opponent — so its only matches are the tournament ones above and its total
+// stays at exactly HEAVY_TOURNEY_MATCH_COUNT.
+const casualOpponents = demoUsers.filter((u) => u.id !== HEAVY_TOURNEY_ID);
 for (const player1 of demoUsers) {
+	if (player1.id === HEAVY_TOURNEY_ID) continue;
+
 	const targetGames =
 		player1.id === MAX_ID
 			? STATIC_USER_MATCH_COUNT
 			: randomInt(...RANDOM_MATCH_COUNT_RANGE, rng);
 
 	for (let i = 0; i < targetGames; i++) {
-		let player2 = randomItem(demoUsers, rng);
+		let player2 = randomItem(casualOpponents, rng);
 		while (player2.id === player1.id) {
-			player2 = randomItem(demoUsers, rng);
+			player2 = randomItem(casualOpponents, rng);
 		}
 		pushDemoMatch(player1.id, player2.id, null);
 	}
