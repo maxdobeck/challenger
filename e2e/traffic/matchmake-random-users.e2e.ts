@@ -3,6 +3,7 @@ import {
 	STATIC_USER,
 	TEST_USER,
 	TOURNEY_USER,
+	HEAVY_TOURNEY_USER,
 	FAKE_PLAYERS,
 	CASUAL_PLAYERS,
 	killteamEmail,
@@ -10,7 +11,7 @@ import {
 } from '../../src/lib/server/db/demo-fixtures';
 import { signOut, waitForLdIdentified } from '../helpers';
 
-// Every login-capable account in either mode: the 3 fixed accounts plus all
+// Every login-capable account in either mode: the 4 fixed accounts plus all
 // of FAKE_PLAYERS (seeded by seed.ts in real-auth mode, and mirrored 1:1 in
 // demo mode's in-memory dataset — see src/lib/server/demo/data.ts). This is a
 // superset of the curated DEMO_LOGIN_ACCOUNTS shown in the /login
@@ -26,11 +27,12 @@ const ALL_ACCOUNTS: ReadonlyArray<{ name: string; email: string }> = [
 	STATIC_USER,
 	TEST_USER,
 	TOURNEY_USER,
+	HEAVY_TOURNEY_USER,
 	...FAKE_PLAYERS.map((name) => ({ name, email: killteamEmail(name) })),
 	...CASUAL_PLAYERS.map((name) => ({ name, email: killteamEmail(name) }))
 ];
 
-// Number of accounts to log in as per run. There are 71 login-capable
+// Number of accounts to log in as per run. There are 72 login-capable
 // accounts total; sampling a subset (rather than all of them) keeps the suite
 // fast while still exercising a fresh random selection every run.
 //
